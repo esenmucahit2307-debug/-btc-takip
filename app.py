@@ -10,38 +10,42 @@ import time
 
 st.set_page_config(page_title="TradingView Tarzı Dashboard", layout="wide")
 
-# ==================== 40+ COİN LİSTESİ ====================
+# ==================== COİN LİSTESİ ====================
 coin_listesi = [
     "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT",
-    "DOGE/USDT", "ADA/USDT", "TRX/USDT", "TON/USDT", "AVAX/USDT",
-    "DOT/USDT", "LTC/USDT", "NEAR/USDT", "APT/USDT", "SUI/USDT",
-    "ATOM/USDT", "LINK/USDT", "UNI/USDT", "AAVE/USDT", "MATIC/USDT",
-    "ARB/USDT", "OP/USDT", "INJ/USDT", "ETC/USDT", "FIL/USDT",
-    "PEPE/USDT", "WIF/USDT", "FLOKI/USDT", "SHIB/USDT", "ZEC/USDT"
+    "DOGE/USDT", "ADA/USDT", "TON/USDT", "AVAX/USDT", "LINK/USDT",
+    "UNI/USDT", "AAVE/USDT", "MATIC/USDT", "ARB/USDT", "OP/USDT",
+    "PEPE/USDT", "WIF/USDT", "FLOKI/USDT", "SHIB/USDT", "SUI/USDT"
 ]
 
-# ==================== HER KALDIRAÇ İÇİN RENK ====================
-KALDIRAC_RENKLERI = {3: '#00FF00', 5: '#00CED1', 10: '#FFD700', 20: '#FF8C00', 50: '#FF0000'}
-
-# ==================== DESTEK/DİRENÇ GÜÇ RENKLERİ (SADECE ÇOK GÜÇLÜ) ====================
-GUÇ_RENKLERI = {
-    4: {'renk': '#00FF00', 'kalınlık': 3.5, 'etiket': 'ÇOK GÜÇLÜ (4/4)'},
-    3: {'renk': '#32CD32', 'kalınlık': 2.8, 'etiket': 'GÜÇLÜ (3/4)'},
-    # 2 ve 1 artık GÖSTERİLMEYECEK - sadece çok güçlüler
+# ==================== 4 BORSA ====================
+BORSALAR = {
+    'Binance': ccxt.binance(),
+    'Bybit': ccxt.bybit(),
+    'Bitget': ccxt.bitget(),
+    'OKX': ccxt.okx()
 }
 
-DIRENC_GUÇ_RENKLERI = {
-    4: {'renk': '#FF0000', 'kalınlık': 3.5, 'etiket': 'ÇOK GÜÇLÜ (4/4)'},
-    3: {'renk': '#FF4444', 'kalınlık': 2.8, 'etiket': 'GÜÇLÜ (3/4)'},
+# ==================== RENKLER ====================
+KALDIRAC_RENKLERI = {3: '#00FF00', 5: '#00CED1', 10: '#FFD700', 20: '#FF8C00', 50: '#FF0000'}
+
+GUCLU_RENKLER = {
+    4: {'renk': '#00FF00', 'kalınlık': 3.5, 'etiket': '🔥 ÇOK GÜÇLÜ (4/4)'},
+    3: {'renk': '#32CD32', 'kalınlık': 2.5, 'etiket': '✅ GÜÇLÜ (3/4)'}
+}
+
+GUCLU_DIRENC_RENKLER = {
+    4: {'renk': '#FF0000', 'kalınlık': 3.5, 'etiket': '🔥 ÇOK GÜÇLÜ (4/4)'},
+    3: {'renk': '#FF6666', 'kalınlık': 2.5, 'etiket': '✅ GÜÇLÜ (3/4)'}
 }
 
 # ==================== BAŞLIK ====================
-st.title("📈 CANLI KRİPTO DASHBOARD")
-st.caption("TradingView tarzı | Sadece ÇOK GÜÇLÜ Destek/Direnç | Tüm coinler için optimize")
+st.title("📈 TRADINGVIEW TARZI DASHBOARD")
+st.caption("Binance + Bybit + Bitget + OKX | Destek/Direnç | Liquidation | SCALP SİNYALLERİ")
 
 # ==================== KENAR ÇUBUĞU ====================
 with st.sidebar:
-    st.header("⚙️ PANEL AYARLARI")
+    st.header("⚙️ AYARLAR")
     
     secilen_coin = st.selectbox("💰 Coin seç:", coin_listesi, index=0)
     coin_adi = secilen_coin.split("/")[0]
@@ -49,37 +53,29 @@ with st.sidebar:
     st.markdown("---")
     
     zaman_dilimleri = {
-        "5 Dakika": "5m", "15 Dakika": "15m", "30 Dakika": "30m",
-        "1 Saat": "1h", "2 Saat": "2h", "4 Saat": "4h",
+        "1 Dakika": "1m", "5 Dakika": "5m", "15 Dakika": "15m",
+        "30 Dakika": "30m", "1 Saat": "1h", "4 Saat": "4h",
         "1 Gün": "1d", "1 Hafta": "1w"
     }
     
-    secili_zaman = st.selectbox("⏱️ Zaman dilimi:", list(zaman_dilimleri.keys()), index=3)
+    secili_zaman = st.selectbox("⏱️ Zaman dilimi:", list(zaman_dilimleri.keys()), index=4)
     tf_kodu = zaman_dilimleri[secili_zaman]
     
     st.markdown("---")
     
-    tum_borsalar = {
-        'Binance': ccxt.binance(),
-        'Bybit': ccxt.bybit(),
-        'Bitget': ccxt.bitget(),
-        'OKX': ccxt.okx()
-    }
-    
-    secili_borsalar = st.multiselect("🏛️ Borsalar:", list(tum_borsalar.keys()), default=list(tum_borsalar.keys()))
-    if len(secili_borsalar) == 0:
-        st.error("❌ En az bir borsa seçin!")
-        st.stop()
+    # Göstergeler
+    st.subheader("📊 Göstergeler")
+    destek_acik = st.checkbox("🟢 Destek Çizgileri", value=True)
+    direnc_acik = st.checkbox("🔴 Direnç Çizgileri", value=True)
     
     st.markdown("---")
     
-    destek_acik = st.checkbox("🟢 Destek Çizgileri (Sadece Çok Güçlü)", value=True)
-    direnc_acik = st.checkbox("🔴 Direnç Çizgileri (Sadece Çok Güçlü)", value=True)
+    # Liquidation
+    st.subheader("🔥 Liquidation Haritası")
+    liq_acik = st.checkbox("Liquidation Haritasını Göster", value=True)
     
-    st.markdown("---")
-    
-    liq_acik = st.checkbox("🔥 Liquidation Haritası", value=True)
     if liq_acik:
+        st.markdown("**Kaldıraç Çarpanları:**")
         col1, col2 = st.columns(2)
         with col1:
             k3x = st.checkbox("3x", value=True)
@@ -102,6 +98,12 @@ with st.sidebar:
     
     st.markdown("---")
     
+    # Scalp Sinyalleri
+    st.subheader("🎯 SCALP SİNYALLERİ")
+    scalp_acik = st.checkbox("Long/Short Scalp Sinyallerini Göster", value=True)
+    
+    st.markdown("---")
+    
     yenileme_araligi = st.select_slider("🔄 Yenileme sıklığı:", options=[10, 15, 30, 60], value=15)
     
     if st.button("🔄 Şimdi Yenile", use_container_width=True):
@@ -109,12 +111,8 @@ with st.sidebar:
     
     st.caption(f"🕐 Son: {datetime.now().strftime('%H:%M:%S')}")
 
-# ==================== BORSALARI HAZIRLA ====================
-borsalar = {adi: tum_borsalar[adi] for adi in secili_borsalar}
-
 # ==================== FONKSİYONLAR ====================
 def veri_cek(borsa, sembol, zaman_dilimi, limit=500):
-    """500 bar geçmiş veri çeker"""
     try:
         bardata = borsa.fetch_ohlcv(sembol, zaman_dilimi, limit=limit)
         df = pd.DataFrame(bardata, columns=['zaman', 'acilis', 'yuksek', 'dusuk', 'kapanis', 'hacim'])
@@ -131,24 +129,19 @@ def anlik_fiyat_al(borsa, sembol):
     except:
         return None, None
 
-def seviye_bul(df, order=8, yuvarla=20):
-    """
-    Destek ve direnç seviyelerini bulur - ALT COİNLER İÇİN OPTİMİZE
-    yuvarla değeri küçültüldü (50 -> 20) alt coinler için
-    """
+def seviye_bul(df, order=10, yuvarla=50):
     if df is None or len(df) < 20:
         return [], []
     
-    # Fiyat aralığına göre yuvarlama değerini ayarla
     son_fiyat = df['kapanis'].iloc[-1]
     if son_fiyat < 10:
         yuvarla = 0.5
     elif son_fiyat < 50:
-        yuvarla = 5
+        yuvarla = 2
     elif son_fiyat < 200:
         yuvarla = 10
     else:
-        yuvarla = 20
+        yuvarla = 50
     
     tepeler = argrelextrema(df['yuksek'].values, np.greater_equal, order=order)[0]
     dipler = argrelextrema(df['dusuk'].values, np.less_equal, order=order)[0]
@@ -156,16 +149,9 @@ def seviye_bul(df, order=8, yuvarla=20):
     direncler = [round(df['yuksek'].iloc[t] / yuvarla) * yuvarla for t in tepeler]
     destekler = [round(df['dusuk'].iloc[d] / yuvarla) * yuvarla for d in dipler]
     
-    # Tekrarları temizle
-    direncler = list(set(direncler))
-    destekler = list(set(destekler))
-    
-    return direncler, destekler
+    return list(set(direncler)), list(set(destekler))
 
-def ortak_seviye_bul_sadece_guclu(tum_direncler, tum_destekler, min_guc=3):
-    """
-    SADECE çok güçlü seviyeleri bul (min 3 borsada görülenler)
-    """
+def ortak_seviye_bul(tum_direncler, tum_destekler, min_guc=3):
     direnc_sayac = Counter()
     for alt_liste in tum_direncler:
         for item in alt_liste:
@@ -176,61 +162,149 @@ def ortak_seviye_bul_sadece_guclu(tum_direncler, tum_destekler, min_guc=3):
         for item in alt_liste:
             destek_sayac[item] += 1
     
-    # Sadece min_guc (3) ve üzeri borsada görülenleri al
     ortak_direnc = [(seviye, sayi) for seviye, sayi in direnc_sayac.items() if sayi >= min_guc]
     ortak_destek = [(seviye, sayi) for seviye, sayi in destek_sayac.items() if sayi >= min_guc]
     
-    # Güce göre sırala (en güçlü önce)
     ortak_direnc.sort(key=lambda x: x[1], reverse=True)
     ortak_destek.sort(key=lambda x: x[1], reverse=True)
     
     return ortak_direnc, ortak_destek
 
-def tahmini_hacim_hesapla(fiyat, kaldirac, coin_adi):
-    base_oi = {"BTC": 15000000000, "ETH": 8000000000, "BNB": 2000000000, "SOL": 2000000000, "XRP": 1000000000}
-    oi = base_oi.get(coin_adi, 200000000)
+def tasfiye_hesapla(guncel_fiyat, kaldiraclar, coin_adi):
+    base_oi = {"BTC": 15000000000, "ETH": 8000000000, "BNB": 2000000000, "SOL": 2000000000}
+    oi = base_oi.get(coin_adi, 500000000)
     oran = {3: 0.15, 5: 0.25, 10: 0.35, 20: 0.15, 50: 0.10}
-    return int(oi * oran.get(kaldirac, 0.1))
-
-def tasfiye_seviyeleri_hesapla(guncel_fiyat, kaldiraclar, coin_adi):
-    long_tasfiye, short_tasfiye = [], []
+    
+    long_tasfiye = []
+    short_tasfiye = []
+    
     for k in kaldiraclar:
-        long_price = round(guncel_fiyat * (1 - 1/k) / (max(1, guncel_fiyat/100)) * (max(1, guncel_fiyat/100)))
-        short_price = round(guncel_fiyat * (1 + 1/k) / (max(1, guncel_fiyat/100)) * (max(1, guncel_fiyat/100)))
-        hacim = tahmini_hacim_hesapla(guncel_fiyat, k, coin_adi)
+        long_price = round(guncel_fiyat * (1 - 1/k))
+        short_price = round(guncel_fiyat * (1 + 1/k))
+        hacim = int(oi * oran.get(k, 0.1))
+        
         long_tasfiye.append({'kaldirac': k, 'fiyat': long_price, 'hacim': hacim, 'renk': KALDIRAC_RENKLERI.get(k, '#FFF')})
         short_tasfiye.append({'kaldirac': k, 'fiyat': short_price, 'hacim': hacim, 'renk': KALDIRAC_RENKLERI.get(k, '#FFF')})
+    
     return {'long': sorted(long_tasfiye, key=lambda x: x['fiyat'], reverse=True), 'short': sorted(short_tasfiye, key=lambda x: x['fiyat'])}
 
-def grafik_ciz(df, baslik, ortak_direnc, ortak_destek, tasfiye, guncel_fiyat, destek_acik, direnc_acik, liq_acik):
+def scalp_sinyalleri_uret(df, guncel_fiyat, destekler, direncler):
+    """Long/Short scalp sinyalleri üretir"""
+    sinyaller = {'long': [], 'short': []}
+    
+    if df is None or len(df) < 20:
+        return sinyaller
+    
+    son_kapanis = df['kapanis'].iloc[-1]
+    onceki_kapanis = df['kapanis'].iloc[-2]
+    son_yuksek = df['yuksek'].iloc[-1]
+    son_dusuk = df['dusuk'].iloc[-1]
+    
+    # Trend hesapla (basit MA)
+    ma_short = df['kapanis'].rolling(5).mean().iloc[-1]
+    ma_long = df['kapanis'].rolling(20).mean().iloc[-1]
+    trend_yukari = ma_short > ma_long
+    
+    # En yakın destek ve direnç
+    en_yakin_destek = None
+    for seviye, _ in destekler:
+        if seviye < guncel_fiyat:
+            if en_yakin_destek is None or seviye > en_yakin_destek:
+                en_yakin_destek = seviye
+    
+    en_yakin_direnc = None
+    for seviye, _ in direncler:
+        if seviye > guncel_fiyat:
+            if en_yakin_direnc is None or seviye < en_yakin_direnc:
+                en_yakin_direnc = seviye
+    
+    mesafe_destek = ((guncel_fiyat - en_yakin_destek) / guncel_fiyat * 100) if en_yakin_destek else 100
+    mesafe_direnc = ((en_yakin_direnc - guncel_fiyat) / guncel_fiyat * 100) if en_yakin_direnc else 100
+    
+    # LONG SİNYALLERİ
+    if son_kapanis > onceki_kapanis * 1.001:
+        sinyaller['long'].append({
+            'seviye': '🟢 HAFİF LONG',
+            'neden': '📈 Fiyat yükseliş trendinde',
+            'hedef': en_yakin_direnc if en_yakin_direnc else guncel_fiyat * 1.01,
+            'zarar_kes': en_yakin_destek if en_yakin_destek else guncel_fiyat * 0.99
+        })
+    
+    if mesafe_destek < 1.5 and en_yakin_destek:
+        sinyaller['long'].append({
+            'seviye': '🟢 GÜÇLÜ LONG',
+            'neden': f'🔥 Destek bölgesine yakın ({mesafe_destek:.1f}%)',
+            'hedef': en_yakin_direnc if en_yakin_direnc else guncel_fiyat * 1.02,
+            'zarar_kes': en_yakin_destek - (guncel_fiyat * 0.005)
+        })
+    
+    if trend_yukari:
+        sinyaller['long'].append({
+            'seviye': '🟡 ORTA LONG',
+            'neden': '📊 Genel trend yukarı yönlü',
+            'hedef': en_yakin_direnc if en_yakin_direnc else guncel_fiyat * 1.015,
+            'zarar_kes': en_yakin_destek if en_yakin_destek else guncel_fiyat * 0.995
+        })
+    
+    # SHORT SİNYALLERİ
+    if son_kapanis < onceki_kapanis * 0.999:
+        sinyaller['short'].append({
+            'seviye': '🔴 HAFİF SHORT',
+            'neden': '📉 Fiyat düşüş trendinde',
+            'hedef': en_yakin_destek if en_yakin_destek else guncel_fiyat * 0.99,
+            'zarar_kes': en_yakin_direnc if en_yakin_direnc else guncel_fiyat * 1.01
+        })
+    
+    if mesafe_direnc < 1.5 and en_yakin_direnc:
+        sinyaller['short'].append({
+            'seviye': '🔴 GÜÇLÜ SHORT',
+            'neden': f'🔥 Direnç bölgesine yakın ({mesafe_direnc:.1f}%)',
+            'hedef': en_yakin_destek if en_yakin_destek else guncel_fiyat * 0.98,
+            'zarar_kes': en_yakin_direnc + (guncel_fiyat * 0.005)
+        })
+    
+    if not trend_yukari and ma_short < ma_long:
+        sinyaller['short'].append({
+            'seviye': '🟠 ORTA SHORT',
+            'neden': '📊 Genel trend aşağı yönlü',
+            'hedef': en_yakin_destek if en_yakin_destek else guncel_fiyat * 0.985,
+            'zarar_kes': en_yakin_direnc if en_yakin_direnc else guncel_fiyat * 1.005
+        })
+    
+    return sinyaller
+
+def grafik_ciz(df, baslik, direncler, destekler, tasfiye, guncel_fiyat, destek_acik, direnc_acik, liq_acik):
     if df is None or len(df) == 0:
         fig = go.Figure()
-        fig.add_annotation(text="Veri alınamadı", showarrow=False)
         return fig
     
     fig = go.Figure()
     
+    # Mum grafiği
     fig.add_trace(go.Candlestick(
         x=df.index, open=df['acilis'], high=df['yuksek'],
         low=df['dusuk'], close=df['kapanis'], name='Fiyat'
     ))
     
-    # SADECE ÇOK GÜÇLÜ DESTEKLER (3+ borsa)
+    # Destekler
     if destek_acik:
-        for seviye, guc in ortak_destek:
-            if guc >= 3:  # Sadece 3 veya 4 borsa
-                g_info = GUÇ_RENKLERI.get(guc, GUÇ_RENKLERI[3])
-                fig.add_hline(y=seviye, line_dash="solid", line_color=g_info['renk'], line_width=g_info['kalınlık'],
-                             annotation_text=f"🟢 DESTEK {seviye:.2f} | {g_info['etiket']}", annotation_position="top right")
+        for seviye, guc in destekler:
+            renk = GUCLU_RENKLER.get(guc, GUCLU_RENKLER[3])['renk']
+            kalinlik = GUCLU_RENKLER.get(guc, GUCLU_RENKLER[3])['kalınlık']
+            etiket = GUCLU_RENKLER.get(guc, GUCLU_RENKLER[3])['etiket']
+            fig.add_hline(y=seviye, line_dash="solid", line_color=renk, line_width=kalinlik,
+                         annotation_text=f"🟢 {etiket} {seviye:.2f}", annotation_position="top right")
     
-    # SADECE ÇOK GÜÇLÜ DİRENÇLER (3+ borsa)
+    # Dirençler
     if direnc_acik:
-        for seviye, guc in ortak_direnc:
-            if guc >= 3:
-                g_info = DIRENC_GUÇ_RENKLERI.get(guc, DIRENC_GUÇ_RENKLERI[3])
-                fig.add_hline(y=seviye, line_dash="solid", line_color=g_info['renk'], line_width=g_info['kalınlık'],
-                             annotation_text=f"🔴 DİRENÇ {seviye:.2f} | {g_info['etiket']}", annotation_position="top right")
+        for seviye, guc in direncler:
+            renk = GUCLU_DIRENC_RENKLER.get(guc, GUCLU_DIRENC_RENKLER[3])['renk']
+            kalinlik = GUCLU_DIRENC_RENKLER.get(guc, GUCLU_DIRENC_RENKLER[3])['kalınlık']
+            etiket = GUCLU_DIRENC_RENKLER.get(guc, GUCLU_DIRENC_RENKLER[3])['etiket']
+            fig.add_hline(y=seviye, line_dash="solid", line_color=renk, line_width=kalinlik,
+                         annotation_text=f"🔴 {etiket} {seviye:.2f}", annotation_position="top right")
     
+    # Liquidation
     if liq_acik:
         for item in tasfiye.get('long', []):
             fig.add_hline(y=item['fiyat'], line_dash="dash", line_color=item['renk'], line_width=2,
@@ -239,128 +313,188 @@ def grafik_ciz(df, baslik, ortak_direnc, ortak_destek, tasfiye, guncel_fiyat, de
             fig.add_hline(y=item['fiyat'], line_dash="dash", line_color=item['renk'], line_width=2,
                          annotation_text=f"💀 SHORT {item['kaldirac']}x", annotation_position="top left")
     
+    # Güncel fiyat
     fig.add_hline(y=guncel_fiyat, line_dash="dot", line_color="white", line_width=1.5,
                  annotation_text=f"📍 GÜNCEL {guncel_fiyat:.2f}", annotation_position="top left")
     
+    # TradingView tarzı layout
     fig.update_layout(
-        height=650, title=baslik, template="plotly_dark",
-        xaxis_title="Zaman", yaxis_title="Fiyat (USDT)",
-        xaxis=dict(rangeslider=dict(visible=False), type="date", fixedrange=False),
-        yaxis=dict(fixedrange=False), dragmode="zoom", hovermode='closest'
+        height=650,
+        title=dict(text=baslik, x=0.5, xanchor='center'),
+        template="plotly_dark",
+        paper_bgcolor='#131722',
+        plot_bgcolor='#131722',
+        xaxis=dict(
+            showgrid=True, gridcolor='#2a2a2a', showline=True, linecolor='#444',
+            rangeslider=dict(visible=False)
+        ),
+        yaxis=dict(
+            showgrid=True, gridcolor='#2a2a2a', showline=True, linecolor='#444', side='right'
+        ),
+        dragmode='zoom',
+        hovermode='x unified'
     )
+    
     return fig
 
 # ==================== ANA İŞLEM ====================
-with st.spinner("Veriler yükleniyor (Sadece çok güçlü destek/direnç taranıyor)..."):
+with st.spinner("Veriler yükleniyor..."):
     
-    st.subheader(f"📊 {coin_adi} Canlı Fiyat Takibi")
+    # Canlı fiyatlar
+    st.subheader(f"💰 {coin_adi} Canlı Fiyat")
     
-    fiyat_cols = st.columns(len(secili_borsalar))
+    fiyat_cols = st.columns(4)
     anlik_fiyatlar = []
-    for idx, borsa_adi in enumerate(secili_borsalar):
-        borsa = tum_borsalar[borsa_adi]
+    for idx, (borsa_adi, borsa) in enumerate(BORSALAR.items()):
         fiyat, degisim = anlik_fiyat_al(borsa, secilen_coin)
         if fiyat:
             anlik_fiyatlar.append(fiyat)
             with fiyat_cols[idx]:
-                st.metric(label=f"{borsa_adi}", value=f"${fiyat:,.4f}" if fiyat < 1 else f"${fiyat:,.2f}",
-                         delta=f"{degisim:.2f}%" if degisim else None)
+                st.metric(borsa_adi, f"${fiyat:,.2f}" if fiyat > 1 else f"${fiyat:,.4f}", f"{degisim:.2f}%" if degisim else None)
     
     ortalama_fiyat = sum(anlik_fiyatlar) / len(anlik_fiyatlar) if anlik_fiyatlar else 0
     
+    # Bilgi kartları
     col1, col2, col3, col4 = st.columns(4)
-    with col1: st.metric("💰 Ortalama", f"${ortalama_fiyat:,.4f}" if ortalama_fiyat < 1 else f"${ortalama_fiyat:,.2f}")
+    with col1: st.metric("💰 Ortalama", f"${ortalama_fiyat:,.2f}" if ortalama_fiyat > 1 else f"${ortalama_fiyat:,.4f}")
     with col2: st.metric("⏱️ Zaman", secili_zaman)
-    with col3: st.metric("🏛️ Borsa", len(secili_borsalar))
+    with col3: st.metric("🏛️ Borsa", "4 Borsa")
     with col4: st.metric("🔄 Yenileme", f"{yenileme_araligi} sn")
     
     st.markdown("---")
     
+    # ==================== SCALP SİNYALLERİ (ÜSTTE) ====================
+    if scalp_acik:
+        st.subheader("🎯 LONG/SHORT SCALP SİNYALLERİ")
+        
+        # Geçici veri ile sinyal üretimi için ön veri çek
+        gecici_df = None
+        for borsa in BORSALAR.values():
+            df = veri_cek(borsa, secilen_coin, tf_kodu, limit=50)
+            if df is not None:
+                gecici_df = df
+                break
+        
+        if gecici_df is not None:
+            # Geçici destek/direnç
+            gecici_direncler = []
+            gecici_destekler = []
+            for borsa in BORSALAR.values():
+                df = veri_cek(borsa, secilen_coin, tf_kodu, limit=100)
+                if df is not None:
+                    d, s = seviye_bul(df, order=10)
+                    gecici_direncler.append(d)
+                    gecici_destekler.append(s)
+            
+            g_ortak_direnc, g_ortak_destek = ortak_seviye_bul(gecici_direncler, gecici_destekler, min_guc=2)
+            sinyaller = scalp_sinyalleri_uret(gecici_df, ortalama_fiyat, g_ortak_destek, g_ortak_direnc)
+            
+            col_long, col_short = st.columns(2)
+            
+            with col_long:
+                st.markdown("### 📈 LONG SİNYALLERİ")
+                if sinyaller['long']:
+                    for s in sinyaller['long'][:3]:
+                        st.markdown(f"""
+                        <div style='background-color:#1a3d1a; border-left: 4px solid #00FF00; padding: 8px; margin: 5px 0; border-radius: 5px;'>
+                        <b>{s['seviye']}</b><br>
+                        📌 {s['neden']}<br>
+                        🎯 Hedef: <b>${s['hedef']:,.2f}</b> | 🛑 Stop: <b>${s['zarar_kes']:,.2f}</b>
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.info("🟡 Şu anda LONG sinyali yok")
+            
+            with col_short:
+                st.markdown("### 📉 SHORT SİNYALLERİ")
+                if sinyaller['short']:
+                    for s in sinyaller['short'][:3]:
+                        st.markdown(f"""
+                        <div style='background-color:#3d1a1a; border-left: 4px solid #FF0000; padding: 8px; margin: 5px 0; border-radius: 5px;'>
+                        <b>{s['seviye']}</b><br>
+                        📌 {s['neden']}<br>
+                        🎯 Hedef: <b>${s['hedef']:,.2f}</b> | 🛑 Stop: <b>${s['zarar_kes']:,.2f}</b>
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.info("🟠 Şu anda SHORT sinyali yok")
+        else:
+            st.warning("Sinyaller için veri bekleniyor...")
+        
+        st.markdown("---")
+    
     # Veri çekme
     tum_direncler, tum_destekler, ana_df = [], [], None
     
-    for borsa_adi, borsa in borsalar.items():
+    for borsa_adi, borsa in BORSALAR.items():
         df = veri_cek(borsa, secilen_coin, tf_kodu, limit=500)
         if df is not None:
-            if ana_df is None: 
+            if ana_df is None:
                 ana_df = df
             
-            # Coin fiyatına göre order değeri
-            son_fiyat = df['kapanis'].iloc[-1]
-            if son_fiyat < 10:
-                order_val = 5
-            elif son_fiyat < 100:
-                order_val = 6
-            else:
+            if tf_kodu in ['1m', '5m']:
                 order_val = 8
+            elif tf_kodu in ['15m', '30m']:
+                order_val = 10
+            elif tf_kodu in ['1h']:
+                order_val = 12
+            else:
+                order_val = 14
             
             direnc, destek = seviye_bul(df, order=order_val)
             tum_direncler.append(direnc)
             tum_destekler.append(destek)
     
-    # SADECE ÇOK GÜÇLÜ seviyeler (en az 3 borsa)
-    ortak_direnc, ortak_destek = ortak_seviye_bul_sadece_guclu(tum_direncler, tum_destekler, min_guc=3)
+    # Sadece güçlü seviyeler (3+ borsa)
+    ortak_direnc, ortak_destek = ortak_seviye_bul(tum_direncler, tum_destekler, min_guc=3)
     
     # Tasfiye
     if liq_acik and secili_kaldiraclar:
-        tasfiye = tasfiye_seviyeleri_hesapla(ortalama_fiyat, secili_kaldiraclar, coin_adi)
+        tasfiye = tasfiye_hesapla(ortalama_fiyat, secili_kaldiraclar, coin_adi)
     else:
         tasfiye = {'long': [], 'short': []}
     
     if ana_df is not None:
-        fig = grafik_ciz(ana_df, f"{coin_adi}/USDT - {secili_zaman} (Sadece Çok Güçlü D/D)", 
-                         ortak_direnc, ortak_destek, tasfiye, ortalama_fiyat, 
-                         destek_acik, direnc_acik, liq_acik)
+        fig = grafik_ciz(ana_df, f"{coin_adi}/USDT - {secili_zaman}", ortak_direnc, ortak_destek, tasfiye, ortalama_fiyat, destek_acik, direnc_acik, liq_acik)
         
-        config = {
-            'scrollZoom': True, 'doubleClick': 'reset', 'displayModeBar': True,
-            'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'displaylogo': False, 'responsive': True
-        }
-        
+        config = {'scrollZoom': True, 'doubleClick': 'reset', 'displayModeBar': True, 'displaylogo': False, 'responsive': True}
         st.plotly_chart(fig, use_container_width=True, config=config)
         
-        # ==================== SADECE ÇOK GÜÇLÜ DESTEK LİSTESİ ====================
+        # Destek Listesi
         if destek_acik and ortak_destek:
             st.markdown("---")
-            st.subheader("🟢 ÇOK GÜÇLÜ DESTEK SEVİYELERİ (3+ Borsa)")
-            for seviye, guc in ortak_destek[:10]:
-                g_info = GUÇ_RENKLERI.get(guc, GUÇ_RENKLERI[3])
-                yuzde = (guc / len(secili_borsalar)) * 100
-                st.markdown(f"<div style='border-left: 4px solid {g_info['renk']}; padding-left: 10px; margin: 5px 0;'>"
-                           f"<b style='color:{g_info['renk']}'>⬤ ${seviye:,.4f if seviye < 1 else seviye:,.2f}</b> | "
-                           f"{g_info['etiket']} | {guc}/{len(secili_borsalar)} borsa (%{yuzde:.0f})</div>", unsafe_allow_html=True)
-            if not ortak_destek:
-                st.info("🔍 Henüz çok güçlü destek seviyesi bulunamadı (3+ borsada ortak seviye yok)")
+            st.subheader("🟢 GÜÇLÜ DESTEK SEVİYELERİ (3+ Borsa)")
+            for seviye, guc in ortak_destek[:8]:
+                renk = GUCLU_RENKLER.get(guc, GUCLU_RENKLER[3])['renk']
+                etiket = GUCLU_RENKLER.get(guc, GUCLU_RENKLER[3])['etiket']
+                st.markdown(f"<div style='border-left: 4px solid {renk}; padding: 5px 10px; margin: 5px 0'>"
+                           f"<b style='color:{renk}'>⬤ ${seviye:,.2f}</b> - {etiket}</div>", unsafe_allow_html=True)
         
+        # Direnç Listesi
         if direnc_acik and ortak_direnc:
             st.markdown("---")
-            st.subheader("🔴 ÇOK GÜÇLÜ DİRENÇ SEVİYELERİ (3+ Borsa)")
-            for seviye, guc in ortak_direnc[:10]:
-                g_info = DIRENC_GUÇ_RENKLERI.get(guc, DIRENC_GUÇ_RENKLERI[3])
-                yuzde = (guc / len(secili_borsalar)) * 100
-                st.markdown(f"<div style='border-left: 4px solid {g_info['renk']}; padding-left: 10px; margin: 5px 0;'>"
-                           f"<b style='color:{g_info['renk']}'>⬤ ${seviye:,.4f if seviye < 1 else seviye:,.2f}</b> | "
-                           f"{g_info['etiket']} | {guc}/{len(secili_borsalar)} borsa (%{yuzde:.0f})</div>", unsafe_allow_html=True)
-            if not ortak_direnc:
-                st.info("🔍 Henüz çok güçlü direnç seviyesi bulunamadı (3+ borsada ortak seviye yok)")
+            st.subheader("🔴 GÜÇLÜ DİRENÇ SEVİYELERİ (3+ Borsa)")
+            for seviye, guc in ortak_direnc[:8]:
+                renk = GUCLU_DIRENC_RENKLER.get(guc, GUCLU_DIRENC_RENKLER[3])['renk']
+                etiket = GUCLU_DIRENC_RENKLER.get(guc, GUCLU_DIRENC_RENKLER[3])['etiket']
+                st.markdown(f"<div style='border-left: 4px solid {renk}; padding: 5px 10px; margin: 5px 0'>"
+                           f"<b style='color:{renk}'>⬤ ${seviye:,.2f}</b> - {etiket}</div>", unsafe_allow_html=True)
         
-        # ==================== TASFİYE LİSTESİ ====================
-        if liq_acik and secili_kaldiraclar and (tasfiye['long'] or tasfiye['short']):
+        # Liquidation Listesi
+        if liq_acik and tasfiye['long']:
             st.markdown("---")
             st.subheader("🔥 LİQUİDATION (TASFİYE) BÖLGELERİ")
             col_l, col_s = st.columns(2)
             with col_l:
-                st.markdown("### 📉 LONG TASFİYE")
-                for item in tasfiye['long']:
-                    st.markdown(f"<div style='border-left: 4px solid {item['renk']}; padding-left: 10px;'>"
-                               f"<b style='color:{item['renk']}'>⚡ {item['kaldirac']}x</b> | ${item['fiyat']:,.2f} | ${item['hacim']/1e6:.1f}M</div>", unsafe_allow_html=True)
+                st.markdown("**📉 LONG TASFİYE**")
+                for item in tasfiye['long'][:5]:
+                    st.markdown(f"<span style='color:{item['renk']}'>⚡ {item['kaldirac']}x</span> | ${item['fiyat']:,.0f} | ${item['hacim']/1e6:.0f}M", unsafe_allow_html=True)
             with col_s:
-                st.markdown("### 📈 SHORT TASFİYE")
-                for item in tasfiye['short']:
-                    st.markdown(f"<div style='border-left: 4px solid {item['renk']}; padding-left: 10px;'>"
-                               f"<b style='color:{item['renk']}'>⚡ {item['kaldirac']}x</b> | ${item['fiyat']:,.2f} | ${item['hacim']/1e6:.1f}M</div>", unsafe_allow_html=True)
+                st.markdown("**📈 SHORT TASFİYE**")
+                for item in tasfiye['short'][:5]:
+                    st.markdown(f"<span style='color:{item['renk']}'>⚡ {item['kaldirac']}x</span> | ${item['fiyat']:,.0f} | ${item['hacim']/1e6:.0f}M", unsafe_allow_html=True)
     else:
-        st.error("❌ Veri alınamadı.")
+        st.error("❌ Veri alınamadı")
 
 # Otomatik yenileme
 if 'son_yenileme' not in st.session_state:
@@ -373,4 +507,4 @@ if gecen_sure > yenileme_araligi:
 else:
     st.info(f"🔄 {int(yenileme_araligi - gecen_sure)} saniye içinde yenilenecek...")
 
-st.caption("💡 **Özellikler:** Sadece 3+ borsada görülen çok güçlü destek/dirençler gösterilir | Alt coinler için optimize edildi")
+st.caption("💡 **Tüm Özellikler:** TradingView grafik | 4 Borsa | Güçlü D/D (3+ Borsa) | Liquidation | Long/Short Scalp Sinyalleri | Fare ile yakınlaştır/kaydır")
