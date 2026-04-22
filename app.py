@@ -8,7 +8,7 @@ from datetime import datetime
 from collections import Counter
 import time
 
-st.set_page_config(page_title="TradingView Tarzı BTC Dashboard", layout="wide")
+st.set_page_config(page_title="TradingView Tarzı Dashboard", layout="wide")
 
 # ==================== 30+ COİN LİSTESİ ====================
 coin_listesi = [
@@ -22,37 +22,29 @@ coin_listesi = [
 
 # ==================== BAŞLIK ====================
 st.title("📈 CANLI KRİPTO DASHBOARD")
-st.caption("TradingView tarzı | Gerçek zamanlı veri | Yakınlaştır/Kaydır | Saniyelik fiyat takibi")
+st.caption("TradingView tarzı | Gerçek zamanlı veri | Tamamen özelleştirilebilir")
 
 # ==================== KENAR ÇUBUĞU ====================
 with st.sidebar:
     st.header("⚙️ PANEL AYARLARI")
     
-    # 1. COIN SEÇİMİ (30+ coin)
+    # 1. COIN SEÇİMİ
     st.subheader("💰 Coin Seçimi")
     secilen_coin = st.selectbox("Coin seç:", coin_listesi, index=0)
     coin_adi = secilen_coin.split("/")[0]
     
     st.markdown("---")
     
-    # 2. ZAMAN DİLİMİ (1dk'dan başlıyor)
+    # 2. ZAMAN DİLİMİ
     st.subheader("⏱️ Zaman Dilimi")
     zaman_dilimleri = {
-        "1 Dakika": "1m",
-        "3 Dakika": "3m",
-        "5 Dakika": "5m",
-        "15 Dakika": "15m",
-        "30 Dakika": "30m",
-        "1 Saat": "1h",
-        "2 Saat": "2h",
-        "4 Saat": "4h",
-        "6 Saat": "6h",
-        "12 Saat": "12h",
-        "1 Gün": "1d",
-        "1 Hafta": "1w"
+        "1 Dakika": "1m", "3 Dakika": "3m", "5 Dakika": "5m",
+        "15 Dakika": "15m", "30 Dakika": "30m", "1 Saat": "1h",
+        "2 Saat": "2h", "4 Saat": "4h", "6 Saat": "6h",
+        "12 Saat": "12h", "1 Gün": "1d", "1 Hafta": "1w"
     }
     
-    secili_zaman = st.selectbox("Zaman dilimi seç:", list(zaman_dilimleri.keys()), index=3)
+    secili_zaman = st.selectbox("Zaman dilimi seç:", list(zaman_dilimleri.keys()), index=4)
     tf_kodu = zaman_dilimleri[secili_zaman]
     
     st.markdown("---")
@@ -78,15 +70,44 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # 4. GÖSTERGELER
-    st.subheader("📊 Göstergeler")
-    goster_destek_direnc = st.checkbox("🟢 Destek/Direnç", value=True)
-    goster_long_tasfiye = st.checkbox("🔥 Long Tasfiye", value=True)
-    goster_short_tasfiye = st.checkbox("💀 Short Tasfiye", value=True)
+    # 4. DESTEK/DİRENÇ AÇ/KAPAT
+    st.subheader("📊 Destek/Direnç")
+    destek_acik = st.checkbox("🟢 Destek Çizgilerini Göster", value=True)
+    direnc_acik = st.checkbox("🔴 Direnç Çizgilerini Göster", value=True)
     
     st.markdown("---")
     
-    # 5. YENİLEME AYARI
+    # 5. LİQUİDATION (TASFİYE) AYARLARI
+    st.subheader("🔥 Liquidation (Tasfiye) Haritası")
+    liq_acik = st.checkbox("📊 Liquidation Haritasını Göster", value=True)
+    
+    if liq_acik:
+        st.markdown("**Kaldıraç Çarpanlarını Seç:**")
+        col1, col2 = st.columns(2)
+        with col1:
+            k3x = st.checkbox("3x", value=True)
+            k5x = st.checkbox("5x", value=True)
+            k10x = st.checkbox("10x", value=True)
+        with col2:
+            k20x = st.checkbox("20x", value=True)
+            k50x = st.checkbox("50x", value=True)
+        
+        secili_kaldiraclar = []
+        if k3x: secili_kaldiraclar.append(3)
+        if k5x: secili_kaldiraclar.append(5)
+        if k10x: secili_kaldiraclar.append(10)
+        if k20x: secili_kaldiraclar.append(20)
+        if k50x: secili_kaldiraclar.append(50)
+        
+        if len(secili_kaldiraclar) == 0:
+            st.warning("⚠️ En az bir kaldıraç seçin!")
+            secili_kaldiraclar = [3, 5, 10]
+    else:
+        secili_kaldiraclar = []
+    
+    st.markdown("---")
+    
+    # 6. YENİLEME AYARI
     st.subheader("🔄 Canlı Güncelleme")
     yenileme_araligi = st.select_slider(
         "Yenileme sıklığı:",
@@ -142,8 +163,8 @@ def ortak_seviye_bul(tum_direncler, tum_destekler, min_borsa=2):
     ortak_destek = [seviye for seviye, sayi in destek_sayac.items() if sayi >= min_borsa]
     return sorted(ortak_direnc), sorted(ortak_destek)
 
-def tasfiye_seviyeleri(guncel_fiyat):
-    kaldiraclar = [3, 5, 10, 20, 50]
+def tasfiye_seviyeleri_hesapla(guncel_fiyat, kaldiraclar):
+    """Seçilen kaldıraçlara göre tasfiye seviyelerini hesaplar"""
     long_tasfiye = []
     short_tasfiye = []
     for k in kaldiraclar:
@@ -154,7 +175,8 @@ def tasfiye_seviyeleri(guncel_fiyat):
         'short': sorted(list(set(short_tasfiye)))
     }
 
-def grafik_ciz(df, baslik, ortak_direnc, ortak_destek, tasfiye, guncel_fiyat):
+def grafik_ciz(df, baslik, ortak_direnc, ortak_destek, tasfiye, guncel_fiyat, 
+               destek_acik, direnc_acik, liq_acik):
     if df is None or len(df) == 0:
         fig = go.Figure()
         fig.add_annotation(text="Veri alınamadı", showarrow=False)
@@ -172,46 +194,41 @@ def grafik_ciz(df, baslik, ortak_direnc, ortak_destek, tasfiye, guncel_fiyat):
         name=f'{baslik} Fiyat'
     ))
     
-    # Destek/Direnç
-    if goster_destek_direnc:
+    # Destek çizgileri (açık ise)
+    if destek_acik:
         for seviye in ortak_destek:
             fig.add_hline(y=seviye, line_dash="solid", line_color="green", line_width=2,
                          annotation_text=f"🟢 DESTEK {seviye:.0f}", annotation_position="top right")
+    
+    # Direnç çizgileri (açık ise)
+    if direnc_acik:
         for seviye in ortak_direnc:
             fig.add_hline(y=seviye, line_dash="solid", line_color="red", line_width=2,
                          annotation_text=f"🔴 DİRENÇ {seviye:.0f}", annotation_position="top right")
     
-    # Tasfiye bölgeleri
-    if goster_long_tasfiye:
+    # Liquidation çizgileri (açık ise)
+    if liq_acik:
         for seviye in tasfiye['long']:
             fig.add_hline(y=seviye, line_dash="dash", line_color="darkred", line_width=2,
                          annotation_text=f"🔥 LONG TASFİYE {seviye:.0f}", annotation_position="bottom left")
-    
-    if goster_short_tasfiye:
         for seviye in tasfiye['short']:
             fig.add_hline(y=seviye, line_dash="dash", line_color="purple", line_width=2,
                          annotation_text=f"💀 SHORT TASFİYE {seviye:.0f}", annotation_position="top left")
     
-    # Güncel fiyat
+    # Güncel fiyat (her zaman göster)
     fig.add_hline(y=guncel_fiyat, line_dash="dot", line_color="white", line_width=1.5,
                  annotation_text=f"📍 GÜNCEL {guncel_fiyat:.0f}", annotation_position="top left")
     
-    # Grafik ayarları - YAKINLAŞTIRMA VE KAYDIRMA İÇİN
+    # Grafik ayarları
     fig.update_layout(
         height=600,
         title=baslik,
         template="plotly_dark",
         xaxis_title="Zaman",
         yaxis_title="Fiyat (USDT)",
-        xaxis=dict(
-            rangeslider=dict(visible=False),
-            type="date",
-            fixedrange=False  # Kaydırmaya izin ver
-        ),
-        yaxis=dict(
-            fixedrange=False  # Yakınlaştırmaya izin ver
-        ),
-        dragmode="zoom",  # Yakınlaştırma modu
+        xaxis=dict(rangeslider=dict(visible=False), type="date", fixedrange=False),
+        yaxis=dict(fixedrange=False),
+        dragmode="zoom",
         hovermode='closest'
     )
     
@@ -220,10 +237,9 @@ def grafik_ciz(df, baslik, ortak_direnc, ortak_destek, tasfiye, guncel_fiyat):
 # ==================== ANA İŞLEM ====================
 with st.spinner("Veriler yükleniyor..."):
     
-    # ==================== SANİYELİK FİYAT TAKİBİ ====================
+    # ==================== CANLI FİYAT TAKİBİ ====================
     st.subheader(f"📊 {coin_adi} Canlı Fiyat Takibi")
     
-    # Canlı fiyat satırı
     fiyat_cols = st.columns(len(secili_borsalar))
     
     anlik_fiyatlar = []
@@ -232,18 +248,16 @@ with st.spinner("Veriler yükleniyor..."):
         fiyat, degisim = anlik_fiyat_al(borsa, secilen_coin)
         if fiyat:
             anlik_fiyatlar.append(fiyat)
-            renk = "🟢" if degisim and degisim > 0 else "🔴" if degisim and degisim < 0 else "⚪"
             with fiyat_cols[idx]:
                 st.metric(
                     label=f"{borsa_adi}",
                     value=f"${fiyat:,.0f}",
-                    delta=f"{degisim:.2f}%" if degisim else None,
-                    delta_color="normal"
+                    delta=f"{degisim:.2f}%" if degisim else None
                 )
     
     ortalama_fiyat = sum(anlik_fiyatlar) / len(anlik_fiyatlar) if anlik_fiyatlar else 0
     
-    # Ortalama fiyat kartı
+    # Bilgi kartları
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("💰 Ortalama Fiyat", f"${ortalama_fiyat:,.0f}" if ortalama_fiyat else "-")
@@ -254,10 +268,19 @@ with st.spinner("Veriler yükleniyor..."):
     with col4:
         st.metric("🔄 Yenileme", f"{yenileme_araligi} sn")
     
+    # Aktif göstergeleri göster
+    aktifler = []
+    if destek_acik: aktifler.append("🟢 Destek")
+    if direnc_acik: aktifler.append("🔴 Direnç")
+    if liq_acik and secili_kaldiraclar: aktifler.append(f"🔥 Liquidation ({', '.join(map(str, secili_kaldiraclar))}x)")
+    
+    if aktifler:
+        st.info(f"📌 **Aktif Göstergeler:** {' | '.join(aktifler)}")
+    
     st.markdown("---")
     
     # ==================== ANA GRAFİK ====================
-    st.subheader("📈 Mum Grafiği (Yakınlaştırmak için fare/parmakla sürükle, çift tıkla sıfırla)")
+    st.subheader("📈 Mum Grafiği (Yakınlaştırmak için sürükle, çift tıkla sıfırla)")
     
     # Veri çekme
     tum_direncler = []
@@ -288,44 +311,78 @@ with st.spinner("Veriler yükleniyor..."):
     # Ortak destek/direnç
     ortak_direnc, ortak_destek = ortak_seviye_bul(tum_direncler, tum_destekler, min_borsa=2)
     
-    # Tasfiye seviyeleri
-    tasfiye = tasfiye_seviyeleri(ortalama_fiyat if ortalama_fiyat else 70000)
+    # Tasfiye seviyeleri (sadece seçili kaldıraçlar ile)
+    if liq_acik and secili_kaldiraclar:
+        tasfiye = tasfiye_seviyeleri_hesapla(ortalama_fiyat if ortalama_fiyat else 70000, secili_kaldiraclar)
+    else:
+        tasfiye = {'long': [], 'short': []}
     
     # Grafik başlığı
     grafik_baslik = f"{coin_adi}/USDT - {secili_zaman} | {', '.join(secili_borsalar)}"
     
     # Grafiği çiz
     if ana_df is not None:
-        fig = grafik_ciz(ana_df, grafik_baslik, ortak_direnc, ortak_destek, tasfiye, ortalama_fiyat)
+        fig = grafik_ciz(ana_df, grafik_baslik, ortak_direnc, ortak_destek, 
+                         tasfiye, ortalama_fiyat, destek_acik, direnc_acik, liq_acik)
         
-        # Konfigürasyon - mobil için dokunmatik destek
         config = {
-            'scrollZoom': True,      # Fare tekerleği ile zoom
-            'doubleClick': 'reset',  # Çift tıkla sıfırla
-            'displayModeBar': True,  # Araç çubuğu göster
+            'scrollZoom': True,
+            'doubleClick': 'reset',
+            'displayModeBar': True,
             'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
-            'responsive': True       # Mobil uyumlu
+            'responsive': True
         }
         
         st.plotly_chart(fig, use_container_width=True, config=config)
         
-        # Destek/direnç listesi
-        col_a, col_b = st.columns(2)
-        with col_a:
-            st.markdown(f"### 🟢 ORTAK DESTEK SEVİYELERİ")
-            if ortak_destek:
-                for s in ortak_destek[:8]:
-                    st.markdown(f"- **${s:,.0f}**")
-            else:
-                st.info("Henüz ortak destek seviyesi bulunamadı")
+        # Destek/direnç listesi (sadece açıksa göster)
+        if destek_acik or direnc_acik:
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if destek_acik:
+                    st.markdown(f"### 🟢 ORTAK DESTEK SEVİYELERİ")
+                    if ortak_destek:
+                        for s in ortak_destek[:8]:
+                            st.markdown(f"- **${s:,.0f}**")
+                    else:
+                        st.info("Henüz ortak destek seviyesi bulunamadı")
+                else:
+                    st.markdown("### 🟢 DESTEK ÇİZGİLERİ KAPALI")
+                    st.caption("Sol menüden açabilirsiniz")
+            
+            with col_b:
+                if direnc_acik:
+                    st.markdown(f"### 🔴 ORTAK DİRENÇ SEVİYELERİ")
+                    if ortak_direnc:
+                        for r in ortak_direnc[:8]:
+                            st.markdown(f"- **${r:,.0f}**")
+                    else:
+                        st.info("Henüz ortak direnç seviyesi bulunamadı")
+                else:
+                    st.markdown("### 🔴 DİRENÇ ÇİZGİLERİ KAPALI")
+                    st.caption("Sol menüden açabilirsiniz")
         
-        with col_b:
-            st.markdown(f"### 🔴 ORTAK DİRENÇ SEVİYELERİ")
-            if ortak_direnc:
-                for r in ortak_direnc[:8]:
-                    st.markdown(f"- **${r:,.0f}**")
-            else:
-                st.info("Henüz ortak direnç seviyesi bulunamadı")
+        # Liquidation listesi
+        if liq_acik and secili_kaldiraclar and (tasfiye['long'] or tasfiye['short']):
+            st.markdown("---")
+            st.subheader("🔥 LİQUİDATION (TASFİYE) BÖLGELERİ")
+            
+            col_c, col_d = st.columns(2)
+            with col_c:
+                st.markdown(f"**📉 LONG TASFİYE (Aşağı Yön)** - Kaldıraç: {', '.join(map(str, secili_kaldiraclar))}x")
+                if tasfiye['long']:
+                    for l in tasfiye['long'][:10]:
+                        st.markdown(f"- **${l:,.0f}**")
+                else:
+                    st.info("Long tasfiye seviyesi bulunamadı")
+            
+            with col_d:
+                st.markdown(f"**📈 SHORT TASFİYE (Yukarı Yön)** - Kaldıraç: {', '.join(map(str, secili_kaldiraclar))}x")
+                if tasfiye['short']:
+                    for s in tasfiye['short'][:10]:
+                        st.markdown(f"- **${s:,.0f}**")
+                else:
+                    st.info("Short tasfiye seviyesi bulunamadı")
     else:
         st.error("❌ Veri alınamadı. Lütfen farklı borsa veya zaman dilimi seçin.")
 
@@ -340,4 +397,5 @@ if gecen_sure > yenileme_araligi:
 else:
     st.info(f"🔄 {int(yenileme_araligi - gecen_sure)} saniye içinde otomatik yenilenecek...")
 
-st.caption("💡 **İpucu:** Grafiğin üzerinde fare/parmakla yakınlaştırıp uzaklaştırabilir, sağa sola kaydırabilirsiniz. Sol menüden coin, zaman dilimi ve borsa değiştirebilirsiniz.")
+st.caption("💡 **İpucu:** Sol menüden Destek/Direnç/Liquidation çizgilerini açıp kapatabilir, Liquidation için kaldıraç çarpanlarını seçebilirsiniz. Grafikte yakınlaştırmak için sürükleyin, çift tıkla sıfırlayın.")
+
