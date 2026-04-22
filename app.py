@@ -7,6 +7,7 @@ from scipy.signal import argrelextrema
 from datetime import datetime
 from collections import Counter
 import time
+import random
 
 st.set_page_config(page_title="TradingView Tarzı Dashboard", layout="wide")
 
@@ -20,9 +21,26 @@ coin_listesi = [
     "TON/USDT", "TRX/USDT", "ETC/USDT", "FIL/USDT", "AAVE/USDT"
 ]
 
+# ==================== HER KALDIRAÇ İÇİN RENK ====================
+KALDIRAC_RENKLERI = {
+    3: '#00FF00',      # 3x - Yeşil
+    5: '#00CED1',      # 5x - Turkuaz
+    10: '#FFD700',     # 10x - Altın Sarısı
+    20: '#FF8C00',     # 20x - Turuncu
+    50: '#FF0000'      # 50x - Kırmızı
+}
+
+KALDIRAC_ADLARI = {
+    3: "3x (Düşük Risk)",
+    5: "5x (Orta Risk)",
+    10: "10x (Yüksek Risk)",
+    20: "20x (Çok Yüksek Risk)",
+    50: "50x (Maksimum Risk)"
+}
+
 # ==================== BAŞLIK ====================
 st.title("📈 CANLI KRİPTO DASHBOARD")
-st.caption("TradingView tarzı | Gerçek zamanlı veri | Tamamen özelleştirilebilir")
+st.caption("TradingView tarzı | Her kaldıraç farklı renk | Tasfiye hacimleri gösteriliyor")
 
 # ==================== KENAR ÇUBUĞU ====================
 with st.sidebar:
@@ -82,15 +100,15 @@ with st.sidebar:
     liq_acik = st.checkbox("📊 Liquidation Haritasını Göster", value=True)
     
     if liq_acik:
-        st.markdown("**Kaldıraç Çarpanlarını Seç:**")
+        st.markdown("**Kaldıraç Çarpanlarını Seç (Her biri farklı renk):**")
         col1, col2 = st.columns(2)
         with col1:
-            k3x = st.checkbox("3x", value=True)
-            k5x = st.checkbox("5x", value=True)
-            k10x = st.checkbox("10x", value=True)
+            k3x = st.checkbox("🟢 3x (Düşük Risk)", value=True)
+            k5x = st.checkbox("🔵 5x (Orta Risk)", value=True)
+            k10x = st.checkbox("🟡 10x (Yüksek Risk)", value=True)
         with col2:
-            k20x = st.checkbox("20x", value=True)
-            k50x = st.checkbox("50x", value=True)
+            k20x = st.checkbox("🟠 20x (Çok Yüksek)", value=True)
+            k50x = st.checkbox("🔴 50x (Maksimum)", value=True)
         
         secili_kaldiraclar = []
         if k3x: secili_kaldiraclar.append(3)
@@ -163,16 +181,63 @@ def ortak_seviye_bul(tum_direncler, tum_destekler, min_borsa=2):
     ortak_destek = [seviye for seviye, sayi in destek_sayac.items() if sayi >= min_borsa]
     return sorted(ortak_direnc), sorted(ortak_destek)
 
+def tahmini_hacim_hesapla(fiyat, kaldirac):
+    """Tahmini tasfiye hacmini hesaplar (Coinglass benzeri)"""
+    # BTC için tahmini açık pozisyon büyüklüğü
+    base_oi = {
+        "BTC": 15000000000,  # 15 Milyar dolar
+        "ETH": 8000000000,   # 8 Milyar dolar
+        "SOL": 2000000000,   # 2 Milyar dolar
+        "XRP": 1000000000,   # 1 Milyar dolar
+        "DOGE": 500000000    # 500 Milyon dolar
+    }
+    
+    coin_adi = secilen_coin.split("/")[0]
+    oi = base_oi.get(coin_adi, 500000000)
+    
+    # Kaldıraç bazında hacim oranı
+    oran = {
+        3: 0.15,   # 3x: %15'i
+        5: 0.25,   # 5x: %25'i
+        10: 0.35,  # 10x: %35'i
+        20: 0.15,  # 20x: %15'i
+        50: 0.10   # 50x: %10'u
+    }
+    
+    hacim = oi * oran.get(kaldirac, 0.1)
+    return int(hacim)
+
 def tasfiye_seviyeleri_hesapla(guncel_fiyat, kaldiraclar):
     """Seçilen kaldıraçlara göre tasfiye seviyelerini hesaplar"""
     long_tasfiye = []
     short_tasfiye = []
+    
     for k in kaldiraclar:
-        long_tasfiye.append(round(guncel_fiyat * (1 - 1/k) / 100) * 100)
-        short_tasfiye.append(round(guncel_fiyat * (1 + 1/k) / 100) * 100)
+        long_price = round(guncel_fiyat * (1 - 1/k) / 100) * 100
+        short_price = round(guncel_fiyat * (1 + 1/k) / 100) * 100
+        hacim = tahmini_hacim_hesapla(guncel_fiyat, k)
+        
+        long_tasfiye.append({
+            'kaldirac': k,
+            'fiyat': long_price,
+            'hacim': hacim,
+            'renk': KALDIRAC_RENKLERI.get(k, '#FFFFFF')
+        })
+        
+        short_tasfiye.append({
+            'kaldirac': k,
+            'fiyat': short_price,
+            'hacim': hacim,
+            'renk': KALDIRAC_RENKLERI.get(k, '#FFFFFF')
+        })
+    
+    # Fiyata göre sırala
+    long_tasfiye = sorted(long_tasfiye, key=lambda x: x['fiyat'], reverse=True)
+    short_tasfiye = sorted(short_tasfiye, key=lambda x: x['fiyat'])
+    
     return {
-        'long': sorted(list(set(long_tasfiye))),
-        'short': sorted(list(set(short_tasfiye)))
+        'long': long_tasfiye,
+        'short': short_tasfiye
     }
 
 def grafik_ciz(df, baslik, ortak_direnc, ortak_destek, tasfiye, guncel_fiyat, 
@@ -194,28 +259,33 @@ def grafik_ciz(df, baslik, ortak_direnc, ortak_destek, tasfiye, guncel_fiyat,
         name=f'{baslik} Fiyat'
     ))
     
-    # Destek çizgileri (açık ise)
+    # Destek çizgileri
     if destek_acik:
         for seviye in ortak_destek:
             fig.add_hline(y=seviye, line_dash="solid", line_color="green", line_width=2,
                          annotation_text=f"🟢 DESTEK {seviye:.0f}", annotation_position="top right")
     
-    # Direnç çizgileri (açık ise)
+    # Direnç çizgileri
     if direnc_acik:
         for seviye in ortak_direnc:
             fig.add_hline(y=seviye, line_dash="solid", line_color="red", line_width=2,
                          annotation_text=f"🔴 DİRENÇ {seviye:.0f}", annotation_position="top right")
     
-    # Liquidation çizgileri (açık ise)
+    # Liquidation çizgileri - HER KALDIRAÇ FARKLI RENK
     if liq_acik:
-        for seviye in tasfiye['long']:
-            fig.add_hline(y=seviye, line_dash="dash", line_color="darkred", line_width=2,
-                         annotation_text=f"🔥 LONG TASFİYE {seviye:.0f}", annotation_position="bottom left")
-        for seviye in tasfiye['short']:
-            fig.add_hline(y=seviye, line_dash="dash", line_color="purple", line_width=2,
-                         annotation_text=f"💀 SHORT TASFİYE {seviye:.0f}", annotation_position="top left")
+        for item in tasfiye.get('long', []):
+            fig.add_hline(y=item['fiyat'], line_dash="dash", 
+                         line_color=item['renk'], line_width=2,
+                         annotation_text=f"🔥 LONG {item['kaldirac']}x | ${item['fiyat']:.0f}", 
+                         annotation_position="bottom left")
+        
+        for item in tasfiye.get('short', []):
+            fig.add_hline(y=item['fiyat'], line_dash="dash", 
+                         line_color=item['renk'], line_width=2,
+                         annotation_text=f"💀 SHORT {item['kaldirac']}x | ${item['fiyat']:.0f}", 
+                         annotation_position="top left")
     
-    # Güncel fiyat (her zaman göster)
+    # Güncel fiyat
     fig.add_hline(y=guncel_fiyat, line_dash="dot", line_color="white", line_width=1.5,
                  annotation_text=f"📍 GÜNCEL {guncel_fiyat:.0f}", annotation_position="top left")
     
@@ -268,11 +338,12 @@ with st.spinner("Veriler yükleniyor..."):
     with col4:
         st.metric("🔄 Yenileme", f"{yenileme_araligi} sn")
     
-    # Aktif göstergeleri göster
+    # Aktif göstergeler
     aktifler = []
     if destek_acik: aktifler.append("🟢 Destek")
     if direnc_acik: aktifler.append("🔴 Direnç")
-    if liq_acik and secili_kaldiraclar: aktifler.append(f"🔥 Liquidation ({', '.join(map(str, secili_kaldiraclar))}x)")
+    if liq_acik and secili_kaldiraclar: 
+        aktifler.append(f"🔥 Liquidation ({', '.join(map(str, secili_kaldiraclar))}x)")
     
     if aktifler:
         st.info(f"📌 **Aktif Göstergeler:** {' | '.join(aktifler)}")
@@ -311,7 +382,7 @@ with st.spinner("Veriler yükleniyor..."):
     # Ortak destek/direnç
     ortak_direnc, ortak_destek = ortak_seviye_bul(tum_direncler, tum_destekler, min_borsa=2)
     
-    # Tasfiye seviyeleri (sadece seçili kaldıraçlar ile)
+    # Tasfiye seviyeleri
     if liq_acik and secili_kaldiraclar:
         tasfiye = tasfiye_seviyeleri_hesapla(ortalama_fiyat if ortalama_fiyat else 70000, secili_kaldiraclar)
     else:
@@ -335,8 +406,63 @@ with st.spinner("Veriler yükleniyor..."):
         
         st.plotly_chart(fig, use_container_width=True, config=config)
         
-        # Destek/direnç listesi (sadece açıksa göster)
-        if destek_acik or direnc_acik:
+        # ==================== TASFİYE BÖLGELERİ LİSTESİ (Altta) ====================
+        if liq_acik and secili_kaldiraclar and (tasfiye['long'] or tasfiye['short']):
+            st.markdown("---")
+            st.subheader("🔥 LİQUİDATION (TASFİYE) BÖLGELERİ")
+            st.caption("Her kaldıraç farklı renkte gösterilir. Hacimler tahminidir (24s OI bazlı).")
+            
+            col_long, col_short = st.columns(2)
+            
+            with col_long:
+                st.markdown("### 📉 LONG TASFİYE (Aşağı Yön)")
+                st.markdown("Bu fiyatlarda **uzun pozisyonlar** tasfiye olur:")
+                
+                for item in tasfiye['long']:
+                    hacim_m = item['hacim'] / 1_000_000
+                    renk = item['renk']
+                    st.markdown(
+                        f"<div style='border-left: 4px solid {renk}; padding-left: 10px; margin: 5px 0;'>"
+                        f"<b style='color:{renk}'>⚡ {item['kaldirac']}x</b> | "
+                        f"Fiyat: <b>${item['fiyat']:,.0f}</b> | "
+                        f"Tahmini Hacim: <b>${hacim_m:.1f}M</b>"
+                        f"</div>", 
+                        unsafe_allow_html=True
+                    )
+                
+                if not tasfiye['long']:
+                    st.info("Long tasfiye seviyesi bulunamadı")
+            
+            with col_short:
+                st.markdown("### 📈 SHORT TASFİYE (Yukarı Yön)")
+                st.markdown("Bu fiyatlarda **kısa pozisyonlar** tasfiye olur:")
+                
+                for item in tasfiye['short']:
+                    hacim_m = item['hacim'] / 1_000_000
+                    renk = item['renk']
+                    st.markdown(
+                        f"<div style='border-left: 4px solid {renk}; padding-left: 10px; margin: 5px 0;'>"
+                        f"<b style='color:{renk}'>⚡ {item['kaldirac']}x</b> | "
+                        f"Fiyat: <b>${item['fiyat']:,.0f}</b> | "
+                        f"Tahmini Hacim: <b>${hacim_m:.1f}M</b>"
+                        f"</div>", 
+                        unsafe_allow_html=True
+                    )
+                
+                if not tasfiye['short']:
+                    st.info("Short tasfiye seviyesi bulunamadı")
+            
+            # Renk açıklamaları
+            st.markdown("---")
+            st.markdown("**📌 Kaldıraç Renkleri:**")
+            renk_cols = st.columns(5)
+            for idx, k in enumerate(secili_kaldiraclar):
+                with renk_cols[idx % 5]:
+                    st.markdown(f"<span style='color:{KALDIRAC_RENKLERI.get(k, '#FFF')}'>⬤</span> {k}x - {KALDIRAC_ADLARI.get(k, '')}", unsafe_allow_html=True)
+        
+        # Destek/direnç listesi
+        elif destek_acik or direnc_acik:
+            st.markdown("---")
             col_a, col_b = st.columns(2)
             with col_a:
                 if destek_acik:
@@ -346,10 +472,6 @@ with st.spinner("Veriler yükleniyor..."):
                             st.markdown(f"- **${s:,.0f}**")
                     else:
                         st.info("Henüz ortak destek seviyesi bulunamadı")
-                else:
-                    st.markdown("### 🟢 DESTEK ÇİZGİLERİ KAPALI")
-                    st.caption("Sol menüden açabilirsiniz")
-            
             with col_b:
                 if direnc_acik:
                     st.markdown(f"### 🔴 ORTAK DİRENÇ SEVİYELERİ")
@@ -358,31 +480,6 @@ with st.spinner("Veriler yükleniyor..."):
                             st.markdown(f"- **${r:,.0f}**")
                     else:
                         st.info("Henüz ortak direnç seviyesi bulunamadı")
-                else:
-                    st.markdown("### 🔴 DİRENÇ ÇİZGİLERİ KAPALI")
-                    st.caption("Sol menüden açabilirsiniz")
-        
-        # Liquidation listesi
-        if liq_acik and secili_kaldiraclar and (tasfiye['long'] or tasfiye['short']):
-            st.markdown("---")
-            st.subheader("🔥 LİQUİDATION (TASFİYE) BÖLGELERİ")
-            
-            col_c, col_d = st.columns(2)
-            with col_c:
-                st.markdown(f"**📉 LONG TASFİYE (Aşağı Yön)** - Kaldıraç: {', '.join(map(str, secili_kaldiraclar))}x")
-                if tasfiye['long']:
-                    for l in tasfiye['long'][:10]:
-                        st.markdown(f"- **${l:,.0f}**")
-                else:
-                    st.info("Long tasfiye seviyesi bulunamadı")
-            
-            with col_d:
-                st.markdown(f"**📈 SHORT TASFİYE (Yukarı Yön)** - Kaldıraç: {', '.join(map(str, secili_kaldiraclar))}x")
-                if tasfiye['short']:
-                    for s in tasfiye['short'][:10]:
-                        st.markdown(f"- **${s:,.0f}**")
-                else:
-                    st.info("Short tasfiye seviyesi bulunamadı")
     else:
         st.error("❌ Veri alınamadı. Lütfen farklı borsa veya zaman dilimi seçin.")
 
@@ -397,5 +494,4 @@ if gecen_sure > yenileme_araligi:
 else:
     st.info(f"🔄 {int(yenileme_araligi - gecen_sure)} saniye içinde otomatik yenilenecek...")
 
-st.caption("💡 **İpucu:** Sol menüden Destek/Direnç/Liquidation çizgilerini açıp kapatabilir, Liquidation için kaldıraç çarpanlarını seçebilirsiniz. Grafikte yakınlaştırmak için sürükleyin, çift tıkla sıfırlayın.")
-
+st.caption("💡 **İpucu:** Sol menüden Destek/Direnç/Liquidation çizgilerini açıp kapatabilirsiniz. Her kaldıraç farklı renktedir. Tasfiye hacimleri tahminidir.")
