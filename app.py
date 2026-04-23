@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from scipy.signal import argrelextrema
-from datetime import datetime, timedelta
+from datetime import datetime
 from collections import Counter
 import time
 
@@ -52,11 +52,12 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Zaman dilimleri (45 DAKİKA ÖZEL)
+    # Zaman dilimleri (45 DK YOK)
     zaman_dilimleri = {
         "1 Dakika": "1m", "5 Dakika": "5m", "15 Dakika": "15m",
-        "30 Dakika": "30m", "45 Dakika": "45m", "1 Saat": "1h",
-        "2 Saat": "2h", "4 Saat": "4h", "1 Gün": "1d", "1 Hafta": "1w"
+        "30 Dakika": "30m", "1 Saat": "1h", "2 Saat": "2h",
+        "4 Saat": "4h", "6 Saat": "6h", "12 Saat": "12h",
+        "1 Gün": "1d", "1 Hafta": "1w"
     }
     
     secili_zaman = st.selectbox("⏱️ Zaman dilimi:", list(zaman_dilimleri.keys()), index=4)
@@ -116,35 +117,12 @@ with st.sidebar:
 # ==================== FONKSİYONLAR ====================
 def veri_cek(borsa, sembol, zaman_dilimi, limit=500):
     try:
-        # 45 dakika özel işlem
-        if zaman_dilimi == '45m':
-            # 45 dakikalık veri için 1 dakikalık verileri alıp birleştir
-            bars_1m = borsa.fetch_ohlcv(sembol, '1m', limit=limit * 45)
-            if bars_1m:
-                # 45 dakikalık gruplama
-                df_1m = pd.DataFrame(bars_1m, columns=['zaman', 'acilis', 'yuksek', 'dusuk', 'kapanis', 'hacim'])
-                df_1m['zaman'] = pd.to_datetime(df_1m['zaman'], unit='ms')
-                df_1m.set_index('zaman', inplace=True)
-                
-                # 45 dakikalık gruplama
-                df = df_1m.resample('45T').agg({
-                    'acilis': 'first',
-                    'yuksek': 'max',
-                    'dusuk': 'min',
-                    'kapanis': 'last',
-                    'hacim': 'sum'
-                }).dropna()
-                return df
-            else:
-                return None
-        else:
-            bardata = borsa.fetch_ohlcv(sembol, zaman_dilimi, limit=limit)
-            df = pd.DataFrame(bardata, columns=['zaman', 'acilis', 'yuksek', 'dusuk', 'kapanis', 'hacim'])
-            df['zaman'] = pd.to_datetime(df['zaman'], unit='ms')
-            df.set_index('zaman', inplace=True)
-            return df
+        bardata = borsa.fetch_ohlcv(sembol, zaman_dilimi, limit=limit)
+        df = pd.DataFrame(bardata, columns=['zaman', 'acilis', 'yuksek', 'dusuk', 'kapanis', 'hacim'])
+        df['zaman'] = pd.to_datetime(df['zaman'], unit='ms')
+        df.set_index('zaman', inplace=True)
+        return df
     except Exception as e:
-        st.warning(f"{borsa} için veri çekilemedi: {str(e)[:50]}")
         return None
 
 def anlik_fiyat_al(borsa, sembol):
@@ -442,7 +420,7 @@ with st.spinner(f"📊 {coin_adi} {secili_zaman} verileri yükleniyor..."):
     tum_direncler, tum_destekler, ana_df = [], [], None
     
     for borsa_adi, borsa in BORSALAR.items():
-        df = veri_cek(borsa, secilen_coin, tf_kodu, limit=300)
+        df = veri_cek(borsa, secilen_coin, tf_kodu, limit=500)
         if df is not None and len(df) > 0:
             if ana_df is None:
                 ana_df = df
@@ -450,7 +428,7 @@ with st.spinner(f"📊 {coin_adi} {secili_zaman} verileri yükleniyor..."):
             # Zaman dilimine göre order değeri
             if tf_kodu in ['1m', '5m']:
                 order_val = 8
-            elif tf_kodu in ['15m', '30m', '45m']:
+            elif tf_kodu in ['15m', '30m']:
                 order_val = 10
             elif tf_kodu in ['1h']:
                 order_val = 12
@@ -460,7 +438,6 @@ with st.spinner(f"📊 {coin_adi} {secili_zaman} verileri yükleniyor..."):
             direnc, destek = seviye_bul(df, order=order_val)
             tum_direncler.append(direnc)
             tum_destekler.append(destek)
-            st.success(f"✅ {borsa_adi} verisi çekildi: {len(df)} bar")
     
     # Sadece güçlü seviyeler (3+ borsa)
     ortak_direnc, ortak_destek = ortak_seviye_bul(tum_direncler, tum_destekler, min_guc=3)
@@ -527,4 +504,4 @@ if gecen_sure > grafik_yenileme:
 else:
     st.info(f"🔄 Grafik {int(grafik_yenileme - gecen_sure)} saniye içinde yenilenecek... (Fiyatlar 1 saniyede bir güncellenir)")
 
-st.caption("💡 **45 Dakika Özel:** 1 dakikalık veriler 45 dakikada bir gruplanarak oluşturulur | Tüm özellikler aktif")
+st.caption("💡 **Tüm Özellikler:** TradingView grafik | 4 Borsa (Binance, Bybit, Bitget, OKX) | Güçlü D/D (3+ Borsa) | Liquidation | Long/Short Scalp Sinyalleri | 1sn fiyat yenileme")
