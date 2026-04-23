@@ -7,7 +7,7 @@ from datetime import datetime
 from collections import Counter
 import time
 import requests
-from streamlit.components.v1 import html
+import plotly.graph_objects as go
 
 st.set_page_config(page_title="Canlı Kripto Dashboard", layout="wide")
 
@@ -19,14 +19,14 @@ def telegram_mesaj_gonder(mesaj):
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mesaj, "parse_mode": "HTML"}
-        r = requests.post(url, json=payload, timeout=5)
-        return r.status_code == 200
+        requests.post(url, json=payload, timeout=5)
+        return True
     except:
         return False
 
 # ==================== BAŞLIK ====================
 st.title("📈 CANLI KRİPTO DASHBOARD")
-st.markdown("**Binance + Bybit + Bitget + OKX** | 4 Borsa | Canlı Fiyat | Destek/Direnç | Scalp Sinyalleri")
+st.markdown("**Binance + Bybit + Bitget + OKX** | 4 Borsa | Canlı Grafik | Destek/Direnç | Scalp Sinyalleri")
 
 # ==================== COİN LİSTESİ ====================
 coin_listesi = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "ZEC/USDT", "APT/USDT", "SUI/USDT"]
@@ -60,9 +60,6 @@ with st.sidebar:
     secili_zaman = st.selectbox("⏱️ Zaman dilimi:", list(zaman_dilimleri.keys()), index=1)
     tf_kodu = zaman_dilimleri[secili_zaman]
     
-    tf_map = {"5m": "5", "15m": "15", "30m": "30", "1h": "60", "4h": "240", "1d": "1D"}
-    tv_tf = tf_map.get(tf_kodu, "15")
-    
     st.markdown("---")
     
     st.subheader("🎯 Göstergeler")
@@ -72,70 +69,20 @@ with st.sidebar:
     
     st.subheader("🤖 TELEGRAM")
     
-    # TEST BUTONU - BURADA KESİNLİKLE VAR
-    test_buton = st.button("📨 Test Mesajı Gönder", use_container_width=True)
-    if test_buton:
+    if st.button("📨 Test Mesajı Gönder", use_container_width=True):
         with st.spinner("Gönderiliyor..."):
             if telegram_mesaj_gonder("✅ Bot çalışıyor! Scalp sinyalleri buraya gelecek."):
-                st.success("✅ Mesaj gönderildi! Telegram'ını kontrol et.")
+                st.success("✅ Mesaj gönderildi!")
             else:
-                st.error("❌ Gönderilemedi! Token veya Chat ID hatalı.")
+                st.error("❌ Hata!")
     
     st.markdown("---")
     
-    if st.button("🔄 Sayfayı Yenile", use_container_width=True):
+    if st.button("🔄 Yenile", use_container_width=True):
         st.rerun()
     
     st.success(f"✅ {len(BORSALAR)} Borsa Aktif")
     st.caption(f"🕐 {datetime.now().strftime('%H:%M:%S')}")
-
-# ==================== TRADINGVIEW GRAFİK ====================
-st.subheader(f"📊 {coin_adi} - {secili_zaman}")
-
-tv_widget = f"""
-<div class="tradingview-widget-container">
-  <div id="tradingview_chart"></div>
-  <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script type="text/javascript">
-  new TradingView.widget({{
-    "width": "100%",
-    "height": 450,
-    "symbol": "BINANCE:{coin_adi}",
-    "interval": "{tv_tf}",
-    "timezone": "Europe/Istanbul",
-    "theme": "dark",
-    "style": "1",
-    "locale": "tr",
-    "enable_publishing": false,
-    "allow_symbol_change": false,
-    "container_id": "tradingview_chart"
-  }});
-  </script>
-</div>
-"""
-html(tv_widget, height=500)
-
-# ==================== CANLI FİYATLAR ====================
-st.subheader(f"💰 {coin_adi} CANLI FİYATLAR")
-
-def anlik_fiyat_al(borsa, sembol):
-    try:
-        ticker = borsa.fetch_ticker(sembol)
-        return ticker['last'], ticker['percentage'] if 'percentage' in ticker else 0
-    except:
-        return None, None
-
-cols = st.columns(4)
-anlik_fiyatlar = []
-for idx, (borsa_adi, borsa) in enumerate(BORSALAR.items()):
-    fiyat, degisim = anlik_fiyat_al(borsa, secilen_coin)
-    if fiyat:
-        anlik_fiyatlar.append(fiyat)
-        with cols[idx]:
-            st.metric(borsa_adi, f"${fiyat:,.2f}", f"{degisim:.2f}%" if degisim else None)
-
-ortalama_fiyat = sum(anlik_fiyatlar) / len(anlik_fiyatlar) if anlik_fiyatlar else 0
-st.metric("📊 ORTALAMA FİYAT", f"${ortalama_fiyat:,.2f}")
 
 # ==================== FONKSİYONLAR ====================
 def veri_cek(borsa, sembol, zaman_dilimi, limit=150):
@@ -147,6 +94,13 @@ def veri_cek(borsa, sembol, zaman_dilimi, limit=150):
         return df
     except:
         return None
+
+def anlik_fiyat_al(borsa, sembol):
+    try:
+        ticker = borsa.fetch_ticker(sembol)
+        return ticker['last'], ticker['percentage'] if 'percentage' in ticker else 0
+    except:
+        return None, None
 
 def seviye_bul(df, order=10):
     if df is None or len(df) < 20:
@@ -168,16 +122,70 @@ def seviye_bul(df, order=10):
     
     return list(set(direncler)), list(set(destekler))
 
+def grafik_ciz(df, baslik):
+    if df is None or len(df) == 0:
+        return go.Figure()
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Candlestick(
+        x=df.index,
+        open=df['acilis'],
+        high=df['yuksek'],
+        low=df['dusuk'],
+        close=df['kapanis'],
+        name='Fiyat'
+    ))
+    
+    fig.update_layout(
+        height=500,
+        title=baslik,
+        template="plotly_dark",
+        xaxis_title="Zaman",
+        yaxis_title="Fiyat (USDT)",
+        xaxis_rangeslider_visible=False,
+        dragmode="zoom"
+    )
+    
+    return fig
+
+# ==================== CANLI FİYATLAR ====================
+st.subheader(f"💰 {coin_adi} CANLI FİYATLAR")
+
+cols = st.columns(4)
+anlik_fiyatlar = []
+for idx, (borsa_adi, borsa) in enumerate(BORSALAR.items()):
+    fiyat, degisim = anlik_fiyat_al(borsa, secilen_coin)
+    if fiyat:
+        anlik_fiyatlar.append(fiyat)
+        with cols[idx]:
+            st.metric(borsa_adi, f"${fiyat:,.2f}", f"{degisim:.2f}%" if degisim else None)
+
+ortalama_fiyat = sum(anlik_fiyatlar) / len(anlik_fiyatlar) if anlik_fiyatlar else 0
+st.metric("📊 ORTALAMA FİYAT", f"${ortalama_fiyat:,.2f}")
+
+# ==================== GRAFİK ====================
+with st.spinner("Grafik yükleniyor..."):
+    ana_df = None
+    for borsa_adi, borsa in BORSALAR.items():
+        df = veri_cek(borsa, secilen_coin, tf_kodu)
+        if df is not None:
+            ana_df = df
+            break
+    
+    if ana_df is not None:
+        fig = grafik_ciz(ana_df, f"{coin_adi} - {secili_zaman} (4 Borsa Verisi)")
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.error("Veri alınamadı")
+
 # ==================== DESTEK/DİRENÇ HESAPLA ====================
 with st.spinner("Destek/Direnç hesaplanıyor..."):
-    tum_direncler, tum_destekler, son_df = [], [], None
+    tum_direncler, tum_destekler = [], []
     
     for borsa_adi, borsa in BORSALAR.items():
         df = veri_cek(borsa, secilen_coin, tf_kodu)
         if df is not None:
-            if son_df is None:
-                son_df = df
-            
             order_val = 10 if tf_kodu in ['15m', '30m'] else 12
             direnc, destek = seviye_bul(df, order=order_val)
             tum_direncler.append(direnc)
@@ -198,29 +206,37 @@ with st.spinner("Destek/Direnç hesaplanıyor..."):
 # ==================== SCALP SİNYALİ ====================
 scalp_sinyali = None
 
-if scalp_acik and son_df is not None and len(son_df) > 20:
-    son_kapanis = son_df['kapanis'].iloc[-1]
-    onceki_kapanis = son_df['kapanis'].iloc[-2]
+if scalp_acik:
+    son_df = None
+    for borsa_adi, borsa in BORSALAR.items():
+        df = veri_cek(borsa, secilen_coin, tf_kodu)
+        if df is not None:
+            son_df = df
+            break
     
-    en_yakin_destek = None
-    for seviye, _ in tum_destek:
-        if seviye < ortalama_fiyat:
-            if en_yakin_destek is None or seviye > en_yakin_destek:
-                en_yakin_destek = seviye
-    
-    en_yakin_direnc = None
-    for seviye, _ in tum_direnc:
-        if seviye > ortalama_fiyat:
-            if en_yakin_direnc is None or seviye < en_yakin_direnc:
-                en_yakin_direnc = seviye
-    
-    mesafe_destek = ((ortalama_fiyat - en_yakin_destek) / ortalama_fiyat * 100) if en_yakin_destek else 100
-    mesafe_direnc = ((en_yakin_direnc - ortalama_fiyat) / ortalama_fiyat * 100) if en_yakin_direnc else 100
-    
-    if mesafe_destek < 1.5 and en_yakin_destek and son_kapanis > onceki_kapanis:
-        scalp_sinyali = {'tip': 'LONG', 'coin': coin_adi, 'fiyat': ortalama_fiyat, 'destek': en_yakin_destek, 'direnc': en_yakin_direnc}
-    elif mesafe_direnc < 1.5 and en_yakin_direnc and son_kapanis < onceki_kapanis:
-        scalp_sinyali = {'tip': 'SHORT', 'coin': coin_adi, 'fiyat': ortalama_fiyat, 'destek': en_yakin_destek, 'direnc': en_yakin_direnc}
+    if son_df is not None and len(son_df) > 20:
+        son_kapanis = son_df['kapanis'].iloc[-1]
+        onceki_kapanis = son_df['kapanis'].iloc[-2]
+        
+        en_yakin_destek = None
+        for seviye, _ in tum_destek:
+            if seviye < ortalama_fiyat:
+                if en_yakin_destek is None or seviye > en_yakin_destek:
+                    en_yakin_destek = seviye
+        
+        en_yakin_direnc = None
+        for seviye, _ in tum_direnc:
+            if seviye > ortalama_fiyat:
+                if en_yakin_direnc is None or seviye < en_yakin_direnc:
+                    en_yakin_direnc = seviye
+        
+        mesafe_destek = ((ortalama_fiyat - en_yakin_destek) / ortalama_fiyat * 100) if en_yakin_destek else 100
+        mesafe_direnc = ((en_yakin_direnc - ortalama_fiyat) / ortalama_fiyat * 100) if en_yakin_direnc else 100
+        
+        if mesafe_destek < 1.5 and en_yakin_destek and son_kapanis > onceki_kapanis:
+            scalp_sinyali = {'tip': 'LONG', 'coin': coin_adi, 'fiyat': ortalama_fiyat, 'destek': en_yakin_destek, 'direnc': en_yakin_direnc}
+        elif mesafe_direnc < 1.5 and en_yakin_direnc and son_kapanis < onceki_kapanis:
+            scalp_sinyali = {'tip': 'SHORT', 'coin': coin_adi, 'fiyat': ortalama_fiyat, 'destek': en_yakin_destek, 'direnc': en_yakin_direnc}
 
 # ==================== TELEGRAM'A GÖNDER ====================
 if scalp_sinyali:
@@ -233,13 +249,14 @@ if scalp_sinyali:
 
 {'🟢 LONG' if scalp_sinyali['tip'] == 'LONG' else '🔴 SHORT'} {scalp_sinyali['coin']}
 
-📍 Fiyat: ${scalp_sinyali['fiyat']:,.2f}
+📍 Giriş: ${scalp_sinyali['fiyat']:,.2f}
 🟢 Destek: ${scalp_sinyali['destek']:,.2f}
 🔴 Direnç: ${scalp_sinyali['direnc']:,.2f}
 
 ⏰ {datetime.now().strftime('%H:%M:%S')}"""
         
         telegram_mesaj_gonder(mesaj)
+        st.success(f"📨 {scalp_sinyali['tip']} sinyali Telegram'a gönderildi!")
 
 # ==================== SCALP SİNYALİ GÖSTER ====================
 if scalp_sinyali:
@@ -252,7 +269,7 @@ if scalp_sinyali:
 
 # ==================== DESTEK/DİRENÇ LİSTESİ ====================
 st.markdown("---")
-st.subheader("📊 DESTEK/DİRENÇ SEVİYELERİ")
+st.subheader("📊 DESTEK/DİRENÇ SEVİYELERİ (4 Borsa)")
 
 col1, col2 = st.columns(2)
 
@@ -280,4 +297,4 @@ with col2:
         else:
             st.markdown(f"⚪ **${seviye:,.2f}** - {guc}/4 Borsa (Zayıf)")
 
-st.caption("💡 Sinyal geldiğinde Telegram'a otomatik mesaj gider | Sol menüde TEST BUTONU var")
+st.caption("💡 Grafik, 4 borsanın verisiyle oluşturulur | Sinyal geldiğinde Telegram'a gider")
