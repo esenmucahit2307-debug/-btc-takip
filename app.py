@@ -12,8 +12,8 @@ from streamlit.components.v1 import html
 st.set_page_config(page_title="Canlı Kripto Dashboard + Telegram Bot", layout="wide")
 
 # ==================== TELEGRAM AYARLARI ====================
-TELEGRAM_TOKEN = "YOUR_BOT_TOKEN"  # @BotFather'dan aldığın token
-TELEGRAM_CHAT_ID = "YOUR_CHAT_ID"  # @userinfobot'tan aldığın ID
+TELEGRAM_TOKEN = "8621122847:AAFvkF1gvqogowpt8UvkBTTRItUuGUVpd5g"  # @BotFather'dan aldığın token
+TELEGRAM_CHAT_ID = "6514368425"  # @userinfobot'tan aldığın ID
 
 def telegram_mesaj_gonder(mesaj):
     """Telegram'a mesaj gönderir"""
