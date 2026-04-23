@@ -6,13 +6,33 @@ from scipy.signal import argrelextrema
 from datetime import datetime
 from collections import Counter
 import time
+import requests
 from streamlit.components.v1 import html
 
-st.set_page_config(page_title="Canlı Kripto Dashboard", layout="wide")
+st.set_page_config(page_title="Canlı Kripto Dashboard + Telegram Bot", layout="wide")
+
+# ==================== TELEGRAM AYARLARI ====================
+TELEGRAM_TOKEN = "YOUR_BOT_TOKEN"  # @BotFather'dan aldığın token
+TELEGRAM_CHAT_ID = "YOUR_CHAT_ID"  # @userinfobot'tan aldığın ID
+
+def telegram_mesaj_gonder(mesaj):
+    """Telegram'a mesaj gönderir"""
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": mesaj,
+            "parse_mode": "HTML"
+        }
+        response = requests.post(url, json=payload, timeout=5)
+        return response.status_code == 200
+    except Exception as e:
+        print(f"Telegram hatası: {e}")
+        return False
 
 # ==================== BAŞLIK ====================
-st.title("📈 CANLI KRİPTO DASHBOARD")
-st.markdown("**Binance + Bybit + Bitget + OKX** (4 Borsa) | Destek/Direnç | SCALP SİNYALLERİ")
+st.title("📈 CANLI KRİPTO DASHBOARD + TELEGRAM BOT")
+st.markdown("**Binance + Bybit + Bitget + OKX** | Scalp sinyalleri TELEGRAM'a gönderilir")
 
 # ==================== COİN LİSTESİ ====================
 coin_listesi = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "ZEC/USDT", "APT/USDT", "SUI/USDT"]
@@ -24,6 +44,12 @@ BORSALAR = {
     'Bitget': ccxt.bitget(),
     'OKX': ccxt.okx()
 }
+
+# ==================== OTURUM BAŞLANGIÇ ====================
+if 'son_sinyal' not in st.session_state:
+    st.session_state.son_sinyal = {}
+if 'gonderilen_sinyaller' not in st.session_state:
+    st.session_state.gonderilen_sinyaller = []
 
 # ==================== KENAR ÇUBUĞU ====================
 with st.sidebar:
@@ -54,13 +80,23 @@ with st.sidebar:
     
     st.markdown("---")
     
+    st.subheader("🤖 TELEGRAM BOT")
+    st.info(f"✅ Bot aktif | Sinyaller gönderilecek")
+    
+    if st.button("📨 Test Mesajı Gönder", use_container_width=True):
+        if telegram_mesaj_gonder("✅ Bot çalışıyor! Scalp sinyalleri buraya gelecek."):
+            st.success("Mesaj gönderildi!")
+        else:
+            st.error("Hata! Token veya Chat ID kontrol et.")
+    
+    st.markdown("---")
+    
     if st.button("🔄 Yenile", use_container_width=True):
         st.rerun()
     
-    st.success("✅ 4 Borsa: Binance, Bybit, Bitget, OKX")
     st.caption(f"🕐 Son: {datetime.now().strftime('%H:%M:%S')}")
 
-# ==================== GRAFİK VE SCALP BİRLİKTE ====================
+# ==================== GRAFİK VE SİNYAL ====================
 col_chart, col_signal = st.columns([3, 1])
 
 with col_chart:
@@ -91,8 +127,6 @@ with col_chart:
 
 with col_signal:
     st.subheader("🎯 SİNYAL")
-    
-    # Placeholder for scalp signal
     scalp_placeholder = st.empty()
 
 # ==================== CANLI FİYATLAR ====================
@@ -189,6 +223,7 @@ with st.spinner("Hesaplanıyor..."):
 
 # ==================== SCALP SİNYALİ ÜRET ====================
 scalp_sinyali = None
+sinyal_gonderildi = False
 
 if scalp_acik and son_df is not None and len(son_df) > 20:
     son_kapanis = son_df['kapanis'].iloc[-1]
@@ -220,25 +255,72 @@ if scalp_acik and son_df is not None and len(son_df) > 20:
     if mesafe_destek < 1.5 and en_yakin_destek and son_kapanis > onceki_kapanis:
         scalp_sinyali = {
             'tip': 'LONG',
+            'coin': coin_adi,
             'giris': ortalama_fiyat,
             'hedef': en_yakin_direnc if en_yakin_direnc else ortalama_fiyat * 1.02,
             'stop': en_yakin_destek - (ortalama_fiyat * 0.005),
             'destek': en_yakin_destek,
             'direnc': en_yakin_direnc,
-            'mesafe': round(mesafe_destek, 2)
+            'mesafe': round(mesafe_destek, 2),
+            'zaman': datetime.now().strftime('%H:%M:%S')
         }
     
     # SHORT SİNYALİ
     elif mesafe_direnc < 1.5 and en_yakin_direnc and son_kapanis < onceki_kapanis:
         scalp_sinyali = {
             'tip': 'SHORT',
+            'coin': coin_adi,
             'giris': ortalama_fiyat,
             'hedef': en_yakin_destek if en_yakin_destek else ortalama_fiyat * 0.98,
             'stop': en_yakin_direnc + (ortalama_fiyat * 0.005),
             'destek': en_yakin_destek,
             'direnc': en_yakin_direnc,
-            'mesafe': round(mesafe_direnc, 2)
+            'mesafe': round(mesafe_direnc, 2),
+            'zaman': datetime.now().strftime('%H:%M:%S')
         }
+
+# ==================== TELEGRAM'A SİNYAL GÖNDER ====================
+if scalp_sinyali:
+    sinyal_id = f"{scalp_sinyali['coin']}_{scalp_sinyali['tip']}_{scalp_sinyali['giris']:.0f}"
+    
+    if sinyal_id not in st.session_state.gonderilen_sinyaller:
+        st.session_state.gonderilen_sinyaller.append(sinyal_id)
+        
+        if scalp_sinyali['tip'] == 'LONG':
+            mesaj = f"""
+🚨 <b>YENİ SCALP SİNYALİ!</b> 🚨
+
+🟢 <b>LONG {scalp_sinyali['coin']}</b>
+
+📍 <b>Giriş:</b> ${scalp_sinyali['giris']:,.2f}
+🎯 <b>Hedef:</b> ${scalp_sinyali['hedef']:,.2f}
+🛑 <b>Stop:</b> ${scalp_sinyali['stop']:,.2f}
+
+📊 <b>Destek:</b> ${scalp_sinyali['destek']:,.2f}
+📈 <b>Mesafe:</b> %{scalp_sinyali['mesafe']}
+
+⏰ <b>Zaman:</b> {scalp_sinyali['zaman']}
+            """
+        else:
+            mesaj = f"""
+🚨 <b>YENİ SCALP SİNYALİ!</b> 🚨
+
+🔴 <b>SHORT {scalp_sinyali['coin']}</b>
+
+📍 <b>Giriş:</b> ${scalp_sinyali['giris']:,.2f}
+🎯 <b>Hedef:</b> ${scalp_sinyali['hedef']:,.2f}
+🛑 <b>Stop:</b> ${scalp_sinyali['stop']:,.2f}
+
+📊 <b>Direnç:</b> ${scalp_sinyali['direnc']:,.2f}
+📉 <b>Mesafe:</b> %{scalp_sinyali['mesafe']}
+
+⏰ <b>Zaman:</b> {scalp_sinyali['zaman']}
+            """
+        
+        if telegram_mesaj_gonder(mesaj):
+            st.success(f"✅ {scalp_sinyali['tip']} sinyali Telegram'a gönderildi!")
+        else:
+            st.error("❌ Telegram gönderimi başarısız! Token kontrol et.")
 
 # ==================== SCALP SİNYALİNİ GRAFİK YANINDA GÖSTER ====================
 with col_signal:
@@ -269,7 +351,7 @@ with col_signal:
             """, unsafe_allow_html=True)
     else:
         if scalp_acik:
-            scalp_placeholder.info("🔍 Bekleniyor")
+            scalp_placeholder.info("🔍 Bekleniyor...")
 
 # ==================== DESTEK/DİRENÇ LİSTESİ ====================
 st.markdown("---")
@@ -309,4 +391,4 @@ with col_res:
 
 # ==================== ÖZET ====================
 st.markdown("---")
-st.caption(f"💡 **Toplam:** {len(tum_destek_seviyeleri)} destek + {len(tum_direnc_seviyeleri)} direnç | Scalp sinyalleri grafiğin sağında gösterilir")
+st.caption(f"💡 **Toplam:** {len(tum_destek_seviyeleri)} destek + {len(tum_direnc_seviyeleri)} direnç | Telegram bot aktif")
