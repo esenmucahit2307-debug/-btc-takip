@@ -9,7 +9,7 @@ import time
 import requests
 from streamlit.components.v1 import html
 
-st.set_page_config(page_title="Canlı Kripto Dashboard + Telegram Bot", layout="wide")
+st.set_page_config(page_title="Canlı Kripto Dashboard", layout="wide")
 
 # ==================== TELEGRAM AYARLARI ====================
 TELEGRAM_TOKEN = "8621122847:AAFvkF1gvqogowpt8UvkBTTRItUuGUVpd5g"
@@ -18,20 +18,15 @@ TELEGRAM_CHAT_ID = "6514368425"
 def telegram_mesaj_gonder(mesaj):
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        payload = {
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": mesaj,
-            "parse_mode": "HTML"
-        }
-        response = requests.post(url, json=payload, timeout=10)
-        return response.status_code == 200
-    except Exception as e:
-        print(f"Telegram hatası: {e}")
+        payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mesaj, "parse_mode": "HTML"}
+        requests.post(url, json=payload, timeout=5)
+        return True
+    except:
         return False
 
 # ==================== BAŞLIK ====================
-st.title("📈 CANLI KRİPTO DASHBOARD + TELEGRAM BOT")
-st.markdown("**Binance + Bybit + Bitget + OKX** | Scalp sinyalleri TELEGRAM'a gönderilir")
+st.title("📈 CANLI KRİPTO DASHBOARD")
+st.markdown("**Binance + Bybit + Bitget + OKX** | Canlı Fiyat | Destek/Direnç | Scalp Sinyalleri | Telegram Bot")
 
 # ==================== COİN LİSTESİ ====================
 coin_listesi = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "ZEC/USDT", "APT/USDT", "SUI/USDT"]
@@ -59,74 +54,62 @@ with st.sidebar:
     
     zaman_dilimleri = {
         "5 Dakika": "5m", "15 Dakika": "15m", "30 Dakika": "30m",
-        "1 Saat": "1h", "4 Saat": "4h", "1 Gün": "1d", "1 Hafta": "1w"
+        "1 Saat": "1h", "4 Saat": "4h", "1 Gün": "1d"
     }
     
-    secili_zaman = st.selectbox("⏱️ Zaman dilimi:", list(zaman_dilimleri.keys()), index=2)
+    secili_zaman = st.selectbox("⏱️ Zaman dilimi:", list(zaman_dilimleri.keys()), index=1)
     tf_kodu = zaman_dilimleri[secili_zaman]
     
-    tf_map = {"5m": "5", "15m": "15", "30m": "30", "1h": "60", "4h": "240", "1d": "1D", "1w": "1W"}
-    tv_tf = tf_map.get(tf_kodu, "60")
+    tf_map = {"5m": "5", "15m": "15", "30m": "30", "1h": "60", "4h": "240", "1d": "1D"}
+    tv_tf = tf_map.get(tf_kodu, "15")
     
     st.markdown("---")
     
-    st.subheader("📊 Göstergeler")
-    destek_acik = st.checkbox("🟢 Destekleri Göster", value=True)
-    direnc_acik = st.checkbox("🔴 Dirençleri Göster", value=True)
-    scalp_acik = st.checkbox("🎯 Scalp Sinyallerini Göster", value=True)
+    st.subheader("🎯 Göstergeler")
+    scalp_acik = st.checkbox("Scalp Sinyallerini Göster", value=True)
     
     st.markdown("---")
     
-    st.subheader("🤖 TELEGRAM BOT")
-    st.info("✅ Bot aktif | Sinyaller otomatik gönderilir")
-    
-    # TEST BUTONU
+    st.subheader("🤖 TELEGRAM")
     if st.button("📨 Test Mesajı Gönder", use_container_width=True):
-        with st.spinner("Gönderiliyor..."):
-            if telegram_mesaj_gonder("✅ Bot çalışıyor! Scalp sinyalleri buraya gelecek."):
-                st.success("✅ Mesaj gönderildi! Telegram'ını kontrol et.")
-            else:
-                st.error("❌ Hata! Token veya Chat ID kontrol et.")
+        if telegram_mesaj_gonder("✅ Bot çalışıyor! Scalp sinyalleri buraya gelecek."):
+            st.success("✅ Gönderildi!")
+        else:
+            st.error("❌ Hata!")
     
     st.markdown("---")
     
-    if st.button("🔄 Sayfayı Yenile", use_container_width=True):
+    if st.button("🔄 Yenile", use_container_width=True):
         st.rerun()
     
-    st.caption(f"🕐 Son güncelleme: {datetime.now().strftime('%H:%M:%S')}")
+    st.success(f"✅ {len(BORSALAR)} Borsa Aktif")
+    st.caption(f"🕐 {datetime.now().strftime('%H:%M:%S')}")
 
-# ==================== GRAFİK VE SİNYAL ====================
-col_chart, col_signal = st.columns([3, 1])
+# ==================== TRADINGVIEW GRAFİK ====================
+st.subheader(f"📊 {coin_adi} - {secili_zaman}")
 
-with col_chart:
-    st.subheader(f"📊 {coin_adi} CANLI GRAFİK - {secili_zaman}")
-    
-    tv_widget = f"""
-    <div class="tradingview-widget-container">
-      <div id="tradingview_chart"></div>
-      <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-      <script type="text/javascript">
-      new TradingView.widget({{
-        "width": "100%",
-        "height": 450,
-        "symbol": "BINANCE:{coin_adi}",
-        "interval": "{tv_tf}",
-        "timezone": "Europe/Istanbul",
-        "theme": "dark",
-        "style": "1",
-        "locale": "tr",
-        "enable_publishing": false,
-        "allow_symbol_change": false,
-        "container_id": "tradingview_chart"
-      }});
-      </script>
-    </div>
-    """
-    html(tv_widget, height=500)
-
-with col_signal:
-    st.subheader("🎯 SİNYAL")
-    scalp_placeholder = st.empty()
+tv_widget = f"""
+<div class="tradingview-widget-container">
+  <div id="tradingview_chart"></div>
+  <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+  <script type="text/javascript">
+  new TradingView.widget({{
+    "width": "100%",
+    "height": 450,
+    "symbol": "BINANCE:{coin_adi}",
+    "interval": "{tv_tf}",
+    "timezone": "Europe/Istanbul",
+    "theme": "dark",
+    "style": "1",
+    "locale": "tr",
+    "enable_publishing": false,
+    "allow_symbol_change": false,
+    "container_id": "tradingview_chart"
+  }});
+  </script>
+</div>
+"""
+html(tv_widget, height=500)
 
 # ==================== CANLI FİYATLAR ====================
 st.subheader(f"💰 {coin_adi} CANLI FİYATLAR")
@@ -138,19 +121,20 @@ def anlik_fiyat_al(borsa, sembol):
     except:
         return None, None
 
-fiyat_cols = st.columns(4)
+cols = st.columns(4)
 anlik_fiyatlar = []
 for idx, (borsa_adi, borsa) in enumerate(BORSALAR.items()):
     fiyat, degisim = anlik_fiyat_al(borsa, secilen_coin)
     if fiyat:
         anlik_fiyatlar.append(fiyat)
-        with fiyat_cols[idx]:
+        with cols[idx]:
             st.metric(borsa_adi, f"${fiyat:,.2f}", f"{degisim:.2f}%" if degisim else None)
 
 ortalama_fiyat = sum(anlik_fiyatlar) / len(anlik_fiyatlar) if anlik_fiyatlar else 0
+st.metric("📊 ORTALAMA FİYAT", f"${ortalama_fiyat:,.2f}")
 
 # ==================== FONKSİYONLAR ====================
-def veri_cek(borsa, sembol, zaman_dilimi, limit=200):
+def veri_cek(borsa, sembol, zaman_dilimi, limit=150):
     try:
         bardata = borsa.fetch_ohlcv(sembol, zaman_dilimi, limit=limit)
         df = pd.DataFrame(bardata, columns=['zaman', 'acilis', 'yuksek', 'dusuk', 'kapanis', 'hacim'])
@@ -181,44 +165,31 @@ def seviye_bul(df, order=10):
     return list(set(direncler)), list(set(destekler))
 
 # ==================== DESTEK/DİRENÇ HESAPLA ====================
-with st.spinner("Hesaplanıyor..."):
-    tum_direncler = []
-    tum_destekler = []
-    son_df = None
+with st.spinner("Destek/Direnç hesaplanıyor..."):
+    tum_direncler, tum_destekler, son_df = [], [], None
     
     for borsa_adi, borsa in BORSALAR.items():
-        df = veri_cek(borsa, secilen_coin, tf_kodu, limit=200)
-        if df is not None and len(df) > 0:
+        df = veri_cek(borsa, secilen_coin, tf_kodu)
+        if df is not None:
             if son_df is None:
                 son_df = df
             
-            if tf_kodu in ['5m']:
-                order_val = 8
-            elif tf_kodu in ['15m', '30m']:
-                order_val = 10
-            else:
-                order_val = 12
-            
+            order_val = 10 if tf_kodu in ['15m', '30m'] else 12
             direnc, destek = seviye_bul(df, order=order_val)
             tum_direncler.append(direnc)
             tum_destekler.append(destek)
     
-    tum_tum_direncler = []
-    for alt_liste in tum_direncler:
-        tum_tum_direncler.extend(alt_liste)
-    
-    tum_tum_destekler = []
-    for alt_liste in tum_destekler:
-        tum_tum_destekler.extend(alt_liste)
+    tum_tum_direncler = [item for alt in tum_direncler for item in alt]
+    tum_tum_destekler = [item for alt in tum_destekler for item in alt]
     
     direnc_sayac = Counter(tum_tum_direncler)
     destek_sayac = Counter(tum_tum_destekler)
     
-    tum_direnc_seviyeleri = [(seviye, sayi) for seviye, sayi in direnc_sayac.items()]
-    tum_destek_seviyeleri = [(seviye, sayi) for seviye, sayi in destek_sayac.items()]
+    tum_direnc = [(s, c) for s, c in direnc_sayac.items()]
+    tum_destek = [(s, c) for s, c in destek_sayac.items()]
     
-    tum_direnc_seviyeleri.sort(key=lambda x: x[1], reverse=True)
-    tum_destek_seviyeleri.sort(key=lambda x: x[1], reverse=True)
+    tum_direnc.sort(key=lambda x: x[1], reverse=True)
+    tum_destek.sort(key=lambda x: x[1], reverse=True)
 
 # ==================== SCALP SİNYALİ ====================
 scalp_sinyali = None
@@ -228,150 +199,81 @@ if scalp_acik and son_df is not None and len(son_df) > 20:
     onceki_kapanis = son_df['kapanis'].iloc[-2]
     
     en_yakin_destek = None
-    for seviye, _ in tum_destek_seviyeleri:
+    for seviye, _ in tum_destek:
         if seviye < ortalama_fiyat:
             if en_yakin_destek is None or seviye > en_yakin_destek:
                 en_yakin_destek = seviye
     
     en_yakin_direnc = None
-    for seviye, _ in tum_direnc_seviyeleri:
+    for seviye, _ in tum_direnc:
         if seviye > ortalama_fiyat:
             if en_yakin_direnc is None or seviye < en_yakin_direnc:
                 en_yakin_direnc = seviye
     
-    if en_yakin_destek:
-        mesafe_destek = (ortalama_fiyat - en_yakin_destek) / ortalama_fiyat * 100
-    else:
-        mesafe_destek = 100
-    
-    if en_yakin_direnc:
-        mesafe_direnc = (en_yakin_direnc - ortalama_fiyat) / ortalama_fiyat * 100
-    else:
-        mesafe_direnc = 100
+    mesafe_destek = ((ortalama_fiyat - en_yakin_destek) / ortalama_fiyat * 100) if en_yakin_destek else 100
+    mesafe_direnc = ((en_yakin_direnc - ortalama_fiyat) / ortalama_fiyat * 100) if en_yakin_direnc else 100
     
     if mesafe_destek < 1.5 and en_yakin_destek and son_kapanis > onceki_kapanis:
-        scalp_sinyali = {
-            'tip': 'LONG',
-            'coin': coin_adi,
-            'giris': ortalama_fiyat,
-            'hedef': en_yakin_direnc if en_yakin_direnc else ortalama_fiyat * 1.02,
-            'stop': en_yakin_destek - (ortalama_fiyat * 0.005),
-            'destek': en_yakin_destek,
-            'direnc': en_yakin_direnc,
-            'mesafe': round(mesafe_destek, 2),
-            'zaman': datetime.now().strftime('%H:%M:%S')
-        }
+        scalp_sinyali = {'tip': 'LONG', 'coin': coin_adi, 'fiyat': ortalama_fiyat, 'destek': en_yakin_destek, 'direnc': en_yakin_direnc}
     elif mesafe_direnc < 1.5 and en_yakin_direnc and son_kapanis < onceki_kapanis:
-        scalp_sinyali = {
-            'tip': 'SHORT',
-            'coin': coin_adi,
-            'giris': ortalama_fiyat,
-            'hedef': en_yakin_destek if en_yakin_destek else ortalama_fiyat * 0.98,
-            'stop': en_yakin_direnc + (ortalama_fiyat * 0.005),
-            'destek': en_yakin_destek,
-            'direnc': en_yakin_direnc,
-            'mesafe': round(mesafe_direnc, 2),
-            'zaman': datetime.now().strftime('%H:%M:%S')
-        }
+        scalp_sinyali = {'tip': 'SHORT', 'coin': coin_adi, 'fiyat': ortalama_fiyat, 'destek': en_yakin_destek, 'direnc': en_yakin_direnc}
 
 # ==================== TELEGRAM'A GÖNDER ====================
 if scalp_sinyali:
-    sinyal_id = f"{scalp_sinyali['coin']}_{scalp_sinyali['tip']}_{scalp_sinyali['giris']:.0f}"
+    sinyal_id = f"{scalp_sinyali['coin']}_{scalp_sinyali['tip']}_{scalp_sinyali['fiyat']:.0f}"
     
     if sinyal_id not in st.session_state.gonderilen_sinyaller:
         st.session_state.gonderilen_sinyaller.append(sinyal_id)
         
-        if scalp_sinyali['tip'] == 'LONG':
-            mesaj = f"""🚨 YENİ SCALP SİNYALİ! 🚨
+        mesaj = f"""🚨 YENİ SCALP SİNYALİ! 🚨
 
-🟢 LONG {scalp_sinyali['coin']}
+{'🟢 LONG' if scalp_sinyali['tip'] == 'LONG' else '🔴 SHORT'} {scalp_sinyali['coin']}
 
-📍 Giriş: ${scalp_sinyali['giris']:,.2f}
-🎯 Hedef: ${scalp_sinyali['hedef']:,.2f}
-🛑 Stop: ${scalp_sinyali['stop']:,.2f}
+📍 Fiyat: ${scalp_sinyali['fiyat']:,.2f}
+🟢 Destek: ${scalp_sinyali['destek']:,.2f}
+🔴 Direnç: ${scalp_sinyali['direnc']:,.2f}
 
-📊 Destek: ${scalp_sinyali['destek']:,.2f}
-📈 Mesafe: %{scalp_sinyali['mesafe']}
-
-⏰ Zaman: {scalp_sinyali['zaman']}"""
-        else:
-            mesaj = f"""🚨 YENİ SCALP SİNYALİ! 🚨
-
-🔴 SHORT {scalp_sinyali['coin']}
-
-📍 Giriş: ${scalp_sinyali['giris']:,.2f}
-🎯 Hedef: ${scalp_sinyali['hedef']:,.2f}
-🛑 Stop: ${scalp_sinyali['stop']:,.2f}
-
-📊 Direnç: ${scalp_sinyali['direnc']:,.2f}
-📉 Mesafe: %{scalp_sinyali['mesafe']}
-
-⏰ Zaman: {scalp_sinyali['zaman']}"""
+⏰ {datetime.now().strftime('%H:%M:%S')}"""
         
         telegram_mesaj_gonder(mesaj)
-        st.success(f"📨 {scalp_sinyali['tip']} sinyali Telegram'a gönderildi!")
 
-# ==================== SİNYALİ GRAFİKTE GÖSTER ====================
-with col_signal:
-    if scalp_sinyali:
-        if scalp_sinyali['tip'] == 'LONG':
-            scalp_placeholder.markdown(f"""
-            <div style='background-color:#1a3d1a; border: 2px solid #00FF00; border-radius: 10px; padding: 15px; text-align: center;'>
-                <h2 style='color:#00FF00; margin:0'>🟢 LONG</h2>
-                <p style='font-size:12px; margin:5px'>Giriş: ${scalp_sinyali['giris']:,.0f}</p>
-                <p style='font-size:12px; margin:5px'>Hedef: ${scalp_sinyali['hedef']:,.0f}</p>
-                <p style='font-size:12px; margin:5px'>Stop: ${scalp_sinyali['stop']:,.0f}</p>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            scalp_placeholder.markdown(f"""
-            <div style='background-color:#3d1a1a; border: 2px solid #FF0000; border-radius: 10px; padding: 15px; text-align: center;'>
-                <h2 style='color:#FF0000; margin:0'>🔴 SHORT</h2>
-                <p style='font-size:12px; margin:5px'>Giriş: ${scalp_sinyali['giris']:,.0f}</p>
-                <p style='font-size:12px; margin:5px'>Hedef: ${scalp_sinyali['hedef']:,.0f}</p>
-                <p style='font-size:12px; margin:5px'>Stop: ${scalp_sinyali['stop']:,.0f}</p>
-            </div>
-            """, unsafe_allow_html=True)
+# ==================== SCALP SİNYALİ GÖSTER ====================
+if scalp_sinyali:
+    if scalp_sinyali['tip'] == 'LONG':
+        st.success(f"🎯 **LONG SCALP SİNYALİ - {scalp_sinyali['coin']}**")
+        st.markdown(f"📍 Giriş: **${scalp_sinyali['fiyat']:,.2f}** | 🟢 Destek: **${scalp_sinyali['destek']:,.2f}** | 🔴 Direnç: **${scalp_sinyali['direnc']:,.2f}**")
     else:
-        if scalp_acik:
-            scalp_placeholder.info("🔍 Sinyal bekleniyor...")
+        st.error(f"🎯 **SHORT SCALP SİNYALİ - {scalp_sinyali['coin']}**")
+        st.markdown(f"📍 Giriş: **${scalp_sinyali['fiyat']:,.2f}** | 🟢 Destek: **${scalp_sinyali['destek']:,.2f}** | 🔴 Direnç: **${scalp_sinyali['direnc']:,.2f}**")
 
 # ==================== DESTEK/DİRENÇ LİSTESİ ====================
 st.markdown("---")
-st.subheader("📊 DESTEK/DİRENÇ SEVİYELERİ (4 Borsa)")
+st.subheader("📊 DESTEK/DİRENÇ SEVİYELERİ")
 
-col_sup, col_res = st.columns(2)
+col1, col2 = st.columns(2)
 
-with col_sup:
+with col1:
     st.markdown("### 🟢 DESTEK")
-    if tum_destek_seviyeleri:
-        for seviye, guc in tum_destek_seviyeleri[:10]:
-            if guc == 4:
-                st.markdown(f"**🔥 ${seviye:,.2f}** - {guc}/4 (Çok Güçlü)")
-            elif guc == 3:
-                st.markdown(f"**✅ ${seviye:,.2f}** - {guc}/4 (Güçlü)")
-            elif guc == 2:
-                st.markdown(f"**🟡 ${seviye:,.2f}** - {guc}/4 (Orta)")
-            else:
-                st.markdown(f"**⚪ ${seviye:,.2f}** - {guc}/4 (Zayıf)")
-    else:
-        st.info("Destek bulunamadı")
+    for seviye, guc in tum_destek[:8]:
+        if guc == 4:
+            st.markdown(f"🔥 **${seviye:,.2f}** - {guc}/4 Borsa (Çok Güçlü)")
+        elif guc == 3:
+            st.markdown(f"✅ **${seviye:,.2f}** - {guc}/4 Borsa (Güçlü)")
+        elif guc == 2:
+            st.markdown(f"🟡 **${seviye:,.2f}** - {guc}/4 Borsa (Orta)")
+        else:
+            st.markdown(f"⚪ **${seviye:,.2f}** - {guc}/4 Borsa (Zayıf)")
 
-with col_res:
+with col2:
     st.markdown("### 🔴 DİRENÇ")
-    if tum_direnc_seviyeleri:
-        for seviye, guc in tum_direnc_seviyeleri[:10]:
-            if guc == 4:
-                st.markdown(f"**🔥 ${seviye:,.2f}** - {guc}/4 (Çok Güçlü)")
-            elif guc == 3:
-                st.markdown(f"**✅ ${seviye:,.2f}** - {guc}/4 (Güçlü)")
-            elif guc == 2:
-                st.markdown(f"**🟡 ${seviye:,.2f}** - {guc}/4 (Orta)")
-            else:
-                st.markdown(f"**⚪ ${seviye:,.2f}** - {guc}/4 (Zayıf)")
-    else:
-        st.info("Direnç bulunamadı")
+    for seviye, guc in tum_direnc[:8]:
+        if guc == 4:
+            st.markdown(f"🔥 **${seviye:,.2f}** - {guc}/4 Borsa (Çok Güçlü)")
+        elif guc == 3:
+            st.markdown(f"✅ **${seviye:,.2f}** - {guc}/4 Borsa (Güçlü)")
+        elif guc == 2:
+            st.markdown(f"🟡 **${seviye:,.2f}** - {guc}/4 Borsa (Orta)")
+        else:
+            st.markdown(f"⚪ **${seviye:,.2f}** - {guc}/4 Borsa (Zayıf)")
 
-# ==================== ALT BİLGİ ====================
-st.markdown("---")
-st.caption("💡 **Telegram Bot:** Sinyal geldiğinde otomatik mesaj gönderilir | Test butonu ile deneyebilirsiniz")
+st.caption("💡 Sinyal geldiğinde Telegram'a otomatik mesaj gider | Test butonu ile deneyebilirsin")
