@@ -6,15 +6,13 @@ from scipy.signal import argrelextrema
 from datetime import datetime
 from collections import Counter
 import time
-import asyncio
-import json
 from streamlit.components.v1 import html
 
 st.set_page_config(page_title="Canlı Kripto Dashboard", layout="wide")
 
 # ==================== BAŞLIK ====================
 st.title("📈 CANLI KRİPTO DASHBOARD")
-st.markdown("**Binance + Bybit + Bitget + OKX** | Gerçek anlık fiyatlar | Güçlü Destek/Direnç (3+ Borsa)")
+st.markdown("**Binance + Bybit + Bitget + OKX** (4 Borsa) | Gerçek anlık fiyatlar | Destek/Direnç (Tüm seviyeler)")
 
 # ==================== COİN LİSTESİ ====================
 coin_listesi = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "ZEC/USDT", "APT/USDT", "SUI/USDT"]
@@ -55,10 +53,11 @@ with st.sidebar:
     
     st.markdown("---")
     
-    if st.button("🔄 Yenile", use_container_width=True):
+    if st.button("🔄 Destek/Dirençleri Yenile", use_container_width=True):
         st.rerun()
     
-    st.caption(f"🕐 Son: {datetime.now().strftime('%H:%M:%S')}")
+    st.success("✅ Binance + Bybit + Bitget + OKX (4 Borsa)")
+    st.caption(f"🕐 Son güncelleme: {datetime.now().strftime('%H:%M:%S')}")
 
 # ==================== TRADINGVIEW GRAFİK ====================
 st.subheader(f"📊 {coin_adi} GRAFİK - {secili_zaman}")
@@ -86,21 +85,29 @@ tv_widget = f"""
 """
 html(tv_widget, height=550)
 
-# ==================== CANLI FİYAT GÜNCELLEME ====================
-st.subheader(f"💰 {coin_adi} CANLI FİYATLAR")
+# ==================== CANLI FİYATLAR ====================
+st.subheader(f"💰 {coin_adi} CANLI FİYATLAR (4 Borsa - 1 Saniye)")
 
-# Placeholder'lar
-fiyat_placeholders = {}
-for borsa_adi in BORSALAR.keys():
-    fiyat_placeholders[borsa_adi] = st.empty()
+def anlik_fiyat_al(borsa, sembol):
+    try:
+        ticker = borsa.fetch_ticker(sembol)
+        return ticker['last'], ticker['percentage'] if 'percentage' in ticker else 0
+    except:
+        return None, None
 
-# Bilgi placeholder'ı
-info_placeholder = st.empty()
+# Fiyatları göster
+fiyat_cols = st.columns(4)
+anlik_fiyatlar = []
+for idx, (borsa_adi, borsa) in enumerate(BORSALAR.items()):
+    fiyat, degisim = anlik_fiyat_al(borsa, secilen_coin)
+    if fiyat:
+        anlik_fiyatlar.append(fiyat)
+        with fiyat_cols[idx]:
+            st.metric(borsa_adi, f"${fiyat:,.2f}", f"{degisim:.2f}%" if degisim else None)
 
-# Destek/direnç placeholder'ı
-dd_placeholder = st.empty()
+ortalama_fiyat = sum(anlik_fiyatlar) / len(anlik_fiyatlar) if anlik_fiyatlar else 0
 
-# ==================== FONKSİYONLAR ====================
+# ==================== DESTEK/DİRENÇ HESAPLAMA ====================
 def veri_cek(borsa, sembol, zaman_dilimi, limit=200):
     try:
         bardata = borsa.fetch_ohlcv(sembol, zaman_dilimi, limit=limit)
@@ -131,25 +138,17 @@ def seviye_bul(df, order=10):
     
     return list(set(direncler)), list(set(destekler))
 
-def anlik_fiyat_al(borsa, sembol):
-    try:
-        ticker = borsa.fetch_ticker(sembol)
-        return ticker['last'], ticker['percentage'] if 'percentage' in ticker else 0
-    except:
-        return None, None
-
-def destek_direnc_hesapla(coin, tf):
-    tum_direncler, tum_destekler, ana_df = [], [], None
+# ==================== DESTEK/DİRENÇ HESAPLA (4 BORSA) ====================
+with st.spinner("4 borsadan destek/direnç seviyeleri hesaplanıyor..."):
+    tum_direncler = []
+    tum_destekler = []
     
     for borsa_adi, borsa in BORSALAR.items():
-        df = veri_cek(borsa, coin, tf, limit=200)
+        df = veri_cek(borsa, secilen_coin, tf_kodu, limit=200)
         if df is not None and len(df) > 0:
-            if ana_df is None:
-                ana_df = df
-            
-            if tf in ['5m']:
+            if tf_kodu in ['5m']:
                 order_val = 8
-            elif tf in ['15m', '30m']:
+            elif tf_kodu in ['15m', '30m']:
                 order_val = 10
             else:
                 order_val = 12
@@ -157,76 +156,79 @@ def destek_direnc_hesapla(coin, tf):
             direnc, destek = seviye_bul(df, order=order_val)
             tum_direncler.append(direnc)
             tum_destekler.append(destek)
+            st.success(f"✅ {borsa_adi} verisi alındı: {len(direnc)} direnç, {len(destek)} destek")
     
-    direnc_sayac = Counter()
+    # TÜM SEVİYELERİ BİRLEŞTİR (4 borsa)
+    tum_tum_direncler = []
     for alt_liste in tum_direncler:
-        for item in alt_liste:
-            direnc_sayac[item] += 1
+        tum_tum_direncler.extend(alt_liste)
     
-    destek_sayac = Counter()
+    tum_tum_destekler = []
     for alt_liste in tum_destekler:
-        for item in alt_liste:
-            destek_sayac[item] += 1
+        tum_tum_destekler.extend(alt_liste)
     
-    ortak_direnc = [(seviye, sayi) for seviye, sayi in direnc_sayac.items() if sayi >= 3]
-    ortak_destek = [(seviye, sayi) for seviye, sayi in destek_sayac.items() if sayi >= 3]
+    # Her seviyenin kaç borsada görüldüğünü hesapla
+    direnc_sayac = Counter(tum_tum_direncler)
+    destek_sayac = Counter(tum_tum_destekler)
     
-    ortak_direnc.sort(key=lambda x: x[1], reverse=True)
-    ortak_destek.sort(key=lambda x: x[1], reverse=True)
+    # Tüm seviyeleri al (1,2,3,4 borsa)
+    tum_direnc_seviyeleri = [(seviye, sayi) for seviye, sayi in direnc_sayac.items()]
+    tum_destek_seviyeleri = [(seviye, sayi) for seviye, sayi in destek_sayac.items()]
     
-    return ortak_direnc, ortak_destek, ana_df
+    # Güce göre sırala (en güçlü önce)
+    tum_direnc_seviyeleri.sort(key=lambda x: x[1], reverse=True)
+    tum_destek_seviyeleri.sort(key=lambda x: x[1], reverse=True)
 
 # ==================== DESTEK/DİRENÇ GÖSTER ====================
-def destek_direnc_goster(ortak_destek, ortak_direnc):
-    col_sup, col_res = st.columns(2)
-    
-    with col_sup:
-        st.markdown("### 🟢 DESTEK SEVİYELERİ (3+ Borsa)")
-        if ortak_destek:
-            for seviye, guc in ortak_destek[:6]:
-                if guc == 4:
-                    st.markdown(f"**🔥 ${seviye:,.2f}** - {guc}/4 borsa (Çok Güçlü)")
-                else:
-                    st.markdown(f"**✅ ${seviye:,.2f}** - {guc}/4 borsa (Güçlü)")
-        else:
-            st.info("🔍 Destek seviyesi bulunamadı")
-    
-    with col_res:
-        st.markdown("### 🔴 DİRENÇ SEVİYELERİ (3+ Borsa)")
-        if ortak_direnc:
-            for seviye, guc in ortak_direnc[:6]:
-                if guc == 4:
-                    st.markdown(f"**🔥 ${seviye:,.2f}** - {guc}/4 borsa (Çok Güçlü)")
-                else:
-                    st.markdown(f"**✅ ${seviye:,.2f}** - {guc}/4 borsa (Güçlü)")
-        else:
-            st.info("🔍 Direnç seviyesi bulunamadı")
-    
-    return col_sup, col_res
-
-# ==================== İLK YÜKLEME ====================
-ortak_direnc, ortak_destek, ana_df = destek_direnc_hesapla(secilen_coin, tf_kodu)
-
-# ==================== CANLI DÖNGÜ ====================
-info_placeholder.info("🔄 Canlı fiyatlar akıyor... Destek/Dirençler sayfa yenilendiğinde güncellenir.")
-
-# Sonsuz döngü ile canlı fiyat güncelleme
-for i in range(100):  # 100 döngü
-    # Fiyatları güncelle
-    for borsa_adi, borsa in BORSALAR.items():
-        fiyat, degisim = anlik_fiyat_al(borsa, secilen_coin)
-        if fiyat:
-            with fiyat_placeholders[borsa_adi]:
-                st.metric(borsa_adi, f"${fiyat:,.2f}", f"{degisim:.2f}%" if degisim else None)
-    
-    time.sleep(1)  # 1 saniye bekle
-    
-    # Her 30 döngüde bir sayfayı yenile (destek/direnç güncellemek için)
-    if i % 30 == 0 and i > 0:
-        st.rerun()
-
-# ==================== DESTEK/DİRENÇ GÖSTERİMİ ====================
 st.markdown("---")
-destek_direnc_goster(ortak_destek, ortak_direnc)
+st.subheader("📊 DESTEK/DİRENÇ SEVİYELERİ (4 Borsa)")
 
-st.caption("💡 **Nasıl çalışır?** Fiyatlar 1 saniyede bir güncellenir. Destek/Dirençler sayfa yenilendiğinde güncellenir (30 saniye).")
+col_sup, col_res = st.columns(2)
+
+with col_sup:
+    st.markdown("### 🟢 DESTEK SEVİYELERİ")
+    if tum_destek_seviyeleri:
+        for seviye, guc in tum_destek_seviyeleri[:12]:
+            if guc == 4:
+                st.markdown(f"**🔥 ${seviye:,.2f}** - {guc}/4 borsa (Çok Güçlü - Tüm borsalar)")
+            elif guc == 3:
+                st.markdown(f"**✅ ${seviye:,.2f}** - {guc}/4 borsa (Güçlü)")
+            elif guc == 2:
+                st.markdown(f"**🟡 ${seviye:,.2f}** - {guc}/4 borsa (Orta)")
+            else:
+                st.markdown(f"**⚪ ${seviye:,.2f}** - {guc}/4 borsa (Zayıf)")
+    else:
+        st.info("🔍 Destek seviyesi bulunamadı")
+    
+    st.caption(f"Toplam {len(tum_destek_seviyeleri)} destek seviyesi")
+
+with col_res:
+    st.markdown("### 🔴 DİRENÇ SEVİYELERİ")
+    if tum_direnc_seviyeleri:
+        for seviye, guc in tum_direnc_seviyeleri[:12]:
+            if guc == 4:
+                st.markdown(f"**🔥 ${seviye:,.2f}** - {guc}/4 borsa (Çok Güçlü - Tüm borsalar)")
+            elif guc == 3:
+                st.markdown(f"**✅ ${seviye:,.2f}** - {guc}/4 borsa (Güçlü)")
+            elif guc == 2:
+                st.markdown(f"**🟡 ${seviye:,.2f}** - {guc}/4 borsa (Orta)")
+            else:
+                st.markdown(f"**⚪ ${seviye:,.2f}** - {guc}/4 borsa (Zayıf)")
+    else:
+        st.info("🔍 Direnç seviyesi bulunamadı")
+    
+    st.caption(f"Toplam {len(tum_direnc_seviyeleri)} direnç seviyesi")
+
+# ==================== ÖZET BİLGİ ====================
+st.markdown("---")
+st.info(f"""
+**📊 ÖZET:**
+- 🔥 **4/4 borsa** = Tüm borsalarda görülen seviye (Çok Güçlü)
+- ✅ **3/4 borsa** = 3 borsada görülen seviye (Güçlü)
+- 🟡 **2/4 borsa** = 2 borsada görülen seviye (Orta)
+- ⚪ **1/4 borsa** = Tek borsada görülen seviye (Zayıf)
+
+**📌 Toplam:** {len(tum_destek_seviyeleri)} destek + {len(tum_direnc_seviyeleri)} direnç seviyesi bulundu.
+""")
+
+st.caption("💡 **Nasıl çalışır?** 4 borsanın (Binance, Bybit, Bitget, OKX) verileri kullanılır. Her seviyenin kaç borsada görüldüğü belirtilir.")
