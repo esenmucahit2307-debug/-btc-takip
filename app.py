@@ -12,9 +12,9 @@ st.set_page_config(page_title="Canlı Kripto Dashboard", layout="wide")
 
 # ==================== BAŞLIK ====================
 st.title("📈 CANLI KRİPTO DASHBOARD")
-st.markdown("**Binance + Bybit + Bitget + OKX** (4 Borsa) | Destek/Direnç | SCALP SİNYALLERİ (BTC, ETH, SOL, ZEC, APT, SUI)")
+st.markdown("**Binance + Bybit + Bitget + OKX** (4 Borsa) | Destek/Direnç | SCALP SİNYALLERİ")
 
-# ==================== COİN LİSTESİ (SADECE SCALP COİNLER) ====================
+# ==================== COİN LİSTESİ ====================
 coin_listesi = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "ZEC/USDT", "APT/USDT", "SUI/USDT"]
 
 # ==================== 4 BORSA ====================
@@ -57,38 +57,46 @@ with st.sidebar:
     if st.button("🔄 Yenile", use_container_width=True):
         st.rerun()
     
-    st.success("✅ Binance + Bybit + Bitget + OKX (4 Borsa)")
-    st.info("🎯 Scalp sinyalleri: BTC, ETH, SOL, ZEC, APT, SUI")
-    st.caption(f"🕐 Son güncelleme: {datetime.now().strftime('%H:%M:%S')}")
+    st.success("✅ 4 Borsa: Binance, Bybit, Bitget, OKX")
+    st.caption(f"🕐 Son: {datetime.now().strftime('%H:%M:%S')}")
 
-# ==================== TRADINGVIEW GRAFİK ====================
-st.subheader(f"📊 {coin_adi} GRAFİK - {secili_zaman}")
+# ==================== GRAFİK VE SCALP BİRLİKTE ====================
+col_chart, col_signal = st.columns([3, 1])
 
-tv_widget = f"""
-<div class="tradingview-widget-container">
-  <div id="tradingview_chart"></div>
-  <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <script type="text/javascript">
-  new TradingView.widget({{
-    "width": "100%",
-    "height": 500,
-    "symbol": "BINANCE:{coin_adi}",
-    "interval": "{tv_tf}",
-    "timezone": "Europe/Istanbul",
-    "theme": "dark",
-    "style": "1",
-    "locale": "tr",
-    "enable_publishing": false,
-    "allow_symbol_change": false,
-    "container_id": "tradingview_chart"
-  }});
-  </script>
-</div>
-"""
-html(tv_widget, height=550)
+with col_chart:
+    st.subheader(f"📊 {coin_adi} CANLI GRAFİK - {secili_zaman}")
+    
+    tv_widget = f"""
+    <div class="tradingview-widget-container">
+      <div id="tradingview_chart"></div>
+      <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+      <script type="text/javascript">
+      new TradingView.widget({{
+        "width": "100%",
+        "height": 450,
+        "symbol": "BINANCE:{coin_adi}",
+        "interval": "{tv_tf}",
+        "timezone": "Europe/Istanbul",
+        "theme": "dark",
+        "style": "1",
+        "locale": "tr",
+        "enable_publishing": false,
+        "allow_symbol_change": false,
+        "container_id": "tradingview_chart"
+      }});
+      </script>
+    </div>
+    """
+    html(tv_widget, height=500)
+
+with col_signal:
+    st.subheader("🎯 SİNYAL")
+    
+    # Placeholder for scalp signal
+    scalp_placeholder = st.empty()
 
 # ==================== CANLI FİYATLAR ====================
-st.subheader(f"💰 {coin_adi} CANLI FİYATLAR (4 Borsa)")
+st.subheader(f"💰 {coin_adi} CANLI FİYATLAR")
 
 def anlik_fiyat_al(borsa, sembol):
     try:
@@ -97,7 +105,6 @@ def anlik_fiyat_al(borsa, sembol):
     except:
         return None, None
 
-# Fiyatları göster
 fiyat_cols = st.columns(4)
 anlik_fiyatlar = []
 for idx, (borsa_adi, borsa) in enumerate(BORSALAR.items()):
@@ -141,7 +148,7 @@ def seviye_bul(df, order=10):
     return list(set(direncler)), list(set(destekler))
 
 # ==================== DESTEK/DİRENÇ HESAPLA ====================
-with st.spinner("4 borsadan destek/direnç seviyeleri hesaplanıyor..."):
+with st.spinner("Hesaplanıyor..."):
     tum_direncler = []
     tum_destekler = []
     son_df = None
@@ -163,7 +170,6 @@ with st.spinner("4 borsadan destek/direnç seviyeleri hesaplanıyor..."):
             tum_direncler.append(direnc)
             tum_destekler.append(destek)
     
-    # Tüm seviyeleri birleştir
     tum_tum_direncler = []
     for alt_liste in tum_direncler:
         tum_tum_direncler.extend(alt_liste)
@@ -172,15 +178,12 @@ with st.spinner("4 borsadan destek/direnç seviyeleri hesaplanıyor..."):
     for alt_liste in tum_destekler:
         tum_tum_destekler.extend(alt_liste)
     
-    # Her seviyenin kaç borsada görüldüğünü hesapla
     direnc_sayac = Counter(tum_tum_direncler)
     destek_sayac = Counter(tum_tum_destekler)
     
-    # Tüm seviyeleri al
     tum_direnc_seviyeleri = [(seviye, sayi) for seviye, sayi in direnc_sayac.items()]
     tum_destek_seviyeleri = [(seviye, sayi) for seviye, sayi in destek_sayac.items()]
     
-    # Güce göre sırala
     tum_direnc_seviyeleri.sort(key=lambda x: x[1], reverse=True)
     tum_destek_seviyeleri.sort(key=lambda x: x[1], reverse=True)
 
@@ -191,7 +194,6 @@ if scalp_acik and son_df is not None and len(son_df) > 20:
     son_kapanis = son_df['kapanis'].iloc[-1]
     onceki_kapanis = son_df['kapanis'].iloc[-2]
     
-    # En yakın destek ve direnç
     en_yakin_destek = None
     for seviye, _ in tum_destek_seviyeleri:
         if seviye < ortalama_fiyat:
@@ -214,7 +216,7 @@ if scalp_acik and son_df is not None and len(son_df) > 20:
     else:
         mesafe_direnc = 100
     
-    # LONG SİNYALİ (Desteğe yakın ve yükseliş)
+    # LONG SİNYALİ
     if mesafe_destek < 1.5 and en_yakin_destek and son_kapanis > onceki_kapanis:
         scalp_sinyali = {
             'tip': 'LONG',
@@ -226,7 +228,7 @@ if scalp_acik and son_df is not None and len(son_df) > 20:
             'mesafe': round(mesafe_destek, 2)
         }
     
-    # SHORT SİNYALİ (Dirence yakın ve düşüş)
+    # SHORT SİNYALİ
     elif mesafe_direnc < 1.5 and en_yakin_direnc and son_kapanis < onceki_kapanis:
         scalp_sinyali = {
             'tip': 'SHORT',
@@ -238,36 +240,38 @@ if scalp_acik and son_df is not None and len(son_df) > 20:
             'mesafe': round(mesafe_direnc, 2)
         }
 
-# ==================== SCALP SİNYALİ GÖSTER ====================
-if scalp_sinyali:
-    st.markdown("---")
-    if scalp_sinyali['tip'] == 'LONG':
-        st.success(f"🎯 **GÜNCEL LONG SCALP SİNYALİ - {coin_adi}**")
-    else:
-        st.error(f"🎯 **GÜNCEL SHORT SCALP SİNYALİ - {coin_adi}**")
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("📍 Giriş Fiyatı", f"${scalp_sinyali['giris']:,.2f}")
-        st.metric("🎯 Hedef", f"${scalp_sinyali['hedef']:,.2f}")
-    with col2:
-        st.metric("🛑 Stop Loss", f"${scalp_sinyali['stop']:,.2f}")
-        if scalp_sinyali['destek']:
-            st.metric("🟢 Destek", f"${scalp_sinyali['destek']:,.2f}")
-    with col3:
-        if scalp_sinyali['direnc']:
-            st.metric("🔴 Direnç", f"${scalp_sinyali['direnc']:,.2f}")
+# ==================== SCALP SİNYALİNİ GRAFİK YANINDA GÖSTER ====================
+with col_signal:
+    if scalp_sinyali:
         if scalp_sinyali['tip'] == 'LONG':
-            kar_orani = ((scalp_sinyali['hedef'] - scalp_sinyali['giris']) / scalp_sinyali['giris'] * 100)
+            scalp_placeholder.markdown(f"""
+            <div style='background-color:#1a3d1a; border: 2px solid #00FF00; border-radius: 10px; padding: 15px; text-align: center;'>
+                <h2 style='color:#00FF00; margin:0'>🟢 LONG</h2>
+                <h3 style='color:#00FF00; margin:0'>SCALP</h3>
+                <hr style='margin:10px 0'>
+                <p style='font-size:14px; margin:5px'>📍 Giriş: <b>${scalp_sinyali['giris']:,.0f}</b></p>
+                <p style='font-size:14px; margin:5px'>🎯 Hedef: <b>${scalp_sinyali['hedef']:,.0f}</b></p>
+                <p style='font-size:14px; margin:5px'>🛑 Stop: <b>${scalp_sinyali['stop']:,.0f}</b></p>
+                <p style='font-size:12px; margin:5px'>📊 Mesafe: %{scalp_sinyali['mesafe']}</p>
+            </div>
+            """, unsafe_allow_html=True)
         else:
-            kar_orani = ((scalp_sinyali['giris'] - scalp_sinyali['hedef']) / scalp_sinyali['giris'] * 100)
-        st.metric("📈 Potansiyel Kar", f"%{kar_orani:.2f}")
-        st.metric("📊 Mesafe", f"%{scalp_sinyali['mesafe']}")
-else:
-    if scalp_acik:
-        st.info("🔍 Şu anda scalp sinyali yok")
+            scalp_placeholder.markdown(f"""
+            <div style='background-color:#3d1a1a; border: 2px solid #FF0000; border-radius: 10px; padding: 15px; text-align: center;'>
+                <h2 style='color:#FF0000; margin:0'>🔴 SHORT</h2>
+                <h3 style='color:#FF0000; margin:0'>SCALP</h3>
+                <hr style='margin:10px 0'>
+                <p style='font-size:14px; margin:5px'>📍 Giriş: <b>${scalp_sinyali['giris']:,.0f}</b></p>
+                <p style='font-size:14px; margin:5px'>🎯 Hedef: <b>${scalp_sinyali['hedef']:,.0f}</b></p>
+                <p style='font-size:14px; margin:5px'>🛑 Stop: <b>${scalp_sinyali['stop']:,.0f}</b></p>
+                <p style='font-size:12px; margin:5px'>📊 Mesafe: %{scalp_sinyali['mesafe']}</p>
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        if scalp_acik:
+            scalp_placeholder.info("🔍 Bekleniyor")
 
-# ==================== DESTEK/DİRENÇ GÖSTER ====================
+# ==================== DESTEK/DİRENÇ LİSTESİ ====================
 st.markdown("---")
 st.subheader("📊 DESTEK/DİRENÇ SEVİYELERİ (4 Borsa)")
 
@@ -305,4 +309,4 @@ with col_res:
 
 # ==================== ÖZET ====================
 st.markdown("---")
-st.caption(f"💡 **Toplam:** {len(tum_destek_seviyeleri)} destek + {len(tum_direnc_seviyeleri)} direnç | Scalp sinyalleri sadece {', '.join(coin_listesi)} coinleri için üretilir.")
+st.caption(f"💡 **Toplam:** {len(tum_destek_seviyeleri)} destek + {len(tum_direnc_seviyeleri)} direnç | Scalp sinyalleri grafiğin sağında gösterilir")
