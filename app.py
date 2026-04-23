@@ -12,9 +12,9 @@ st.set_page_config(page_title="Canlı Kripto Dashboard", layout="wide")
 
 # ==================== BAŞLIK ====================
 st.title("📈 CANLI KRİPTO DASHBOARD")
-st.markdown("**Binance + Bybit + Bitget + OKX** (4 Borsa) | Gerçek anlık fiyatlar | Destek/Direnç (Tüm seviyeler)")
+st.markdown("**Binance + Bybit + Bitget + OKX** (4 Borsa) | Destek/Direnç | SCALP SİNYALLERİ (BTC, ETH, SOL, ZEC, APT, SUI)")
 
-# ==================== COİN LİSTESİ ====================
+# ==================== COİN LİSTESİ (SADECE SCALP COİNLER) ====================
 coin_listesi = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "ZEC/USDT", "APT/USDT", "SUI/USDT"]
 
 # ==================== 4 BORSA ====================
@@ -50,13 +50,15 @@ with st.sidebar:
     st.subheader("📊 Göstergeler")
     destek_acik = st.checkbox("🟢 Destekleri Göster", value=True)
     direnc_acik = st.checkbox("🔴 Dirençleri Göster", value=True)
+    scalp_acik = st.checkbox("🎯 Scalp Sinyallerini Göster", value=True)
     
     st.markdown("---")
     
-    if st.button("🔄 Destek/Dirençleri Yenile", use_container_width=True):
+    if st.button("🔄 Yenile", use_container_width=True):
         st.rerun()
     
     st.success("✅ Binance + Bybit + Bitget + OKX (4 Borsa)")
+    st.info("🎯 Scalp sinyalleri: BTC, ETH, SOL, ZEC, APT, SUI")
     st.caption(f"🕐 Son güncelleme: {datetime.now().strftime('%H:%M:%S')}")
 
 # ==================== TRADINGVIEW GRAFİK ====================
@@ -86,7 +88,7 @@ tv_widget = f"""
 html(tv_widget, height=550)
 
 # ==================== CANLI FİYATLAR ====================
-st.subheader(f"💰 {coin_adi} CANLI FİYATLAR (4 Borsa - 1 Saniye)")
+st.subheader(f"💰 {coin_adi} CANLI FİYATLAR (4 Borsa)")
 
 def anlik_fiyat_al(borsa, sembol):
     try:
@@ -107,7 +109,7 @@ for idx, (borsa_adi, borsa) in enumerate(BORSALAR.items()):
 
 ortalama_fiyat = sum(anlik_fiyatlar) / len(anlik_fiyatlar) if anlik_fiyatlar else 0
 
-# ==================== DESTEK/DİRENÇ HESAPLAMA ====================
+# ==================== FONKSİYONLAR ====================
 def veri_cek(borsa, sembol, zaman_dilimi, limit=200):
     try:
         bardata = borsa.fetch_ohlcv(sembol, zaman_dilimi, limit=limit)
@@ -138,14 +140,18 @@ def seviye_bul(df, order=10):
     
     return list(set(direncler)), list(set(destekler))
 
-# ==================== DESTEK/DİRENÇ HESAPLA (4 BORSA) ====================
+# ==================== DESTEK/DİRENÇ HESAPLA ====================
 with st.spinner("4 borsadan destek/direnç seviyeleri hesaplanıyor..."):
     tum_direncler = []
     tum_destekler = []
+    son_df = None
     
     for borsa_adi, borsa in BORSALAR.items():
         df = veri_cek(borsa, secilen_coin, tf_kodu, limit=200)
         if df is not None and len(df) > 0:
+            if son_df is None:
+                son_df = df
+            
             if tf_kodu in ['5m']:
                 order_val = 8
             elif tf_kodu in ['15m', '30m']:
@@ -156,9 +162,8 @@ with st.spinner("4 borsadan destek/direnç seviyeleri hesaplanıyor..."):
             direnc, destek = seviye_bul(df, order=order_val)
             tum_direncler.append(direnc)
             tum_destekler.append(destek)
-            st.success(f"✅ {borsa_adi} verisi alındı: {len(direnc)} direnç, {len(destek)} destek")
     
-    # TÜM SEVİYELERİ BİRLEŞTİR (4 borsa)
+    # Tüm seviyeleri birleştir
     tum_tum_direncler = []
     for alt_liste in tum_direncler:
         tum_tum_direncler.extend(alt_liste)
@@ -171,13 +176,96 @@ with st.spinner("4 borsadan destek/direnç seviyeleri hesaplanıyor..."):
     direnc_sayac = Counter(tum_tum_direncler)
     destek_sayac = Counter(tum_tum_destekler)
     
-    # Tüm seviyeleri al (1,2,3,4 borsa)
+    # Tüm seviyeleri al
     tum_direnc_seviyeleri = [(seviye, sayi) for seviye, sayi in direnc_sayac.items()]
     tum_destek_seviyeleri = [(seviye, sayi) for seviye, sayi in destek_sayac.items()]
     
-    # Güce göre sırala (en güçlü önce)
+    # Güce göre sırala
     tum_direnc_seviyeleri.sort(key=lambda x: x[1], reverse=True)
     tum_destek_seviyeleri.sort(key=lambda x: x[1], reverse=True)
+
+# ==================== SCALP SİNYALİ ÜRET ====================
+scalp_sinyali = None
+
+if scalp_acik and son_df is not None and len(son_df) > 20:
+    son_kapanis = son_df['kapanis'].iloc[-1]
+    onceki_kapanis = son_df['kapanis'].iloc[-2]
+    
+    # En yakın destek ve direnç
+    en_yakin_destek = None
+    for seviye, _ in tum_destek_seviyeleri:
+        if seviye < ortalama_fiyat:
+            if en_yakin_destek is None or seviye > en_yakin_destek:
+                en_yakin_destek = seviye
+    
+    en_yakin_direnc = None
+    for seviye, _ in tum_direnc_seviyeleri:
+        if seviye > ortalama_fiyat:
+            if en_yakin_direnc is None or seviye < en_yakin_direnc:
+                en_yakin_direnc = seviye
+    
+    if en_yakin_destek:
+        mesafe_destek = (ortalama_fiyat - en_yakin_destek) / ortalama_fiyat * 100
+    else:
+        mesafe_destek = 100
+    
+    if en_yakin_direnc:
+        mesafe_direnc = (en_yakin_direnc - ortalama_fiyat) / ortalama_fiyat * 100
+    else:
+        mesafe_direnc = 100
+    
+    # LONG SİNYALİ (Desteğe yakın ve yükseliş)
+    if mesafe_destek < 1.5 and en_yakin_destek and son_kapanis > onceki_kapanis:
+        scalp_sinyali = {
+            'tip': 'LONG',
+            'giris': ortalama_fiyat,
+            'hedef': en_yakin_direnc if en_yakin_direnc else ortalama_fiyat * 1.02,
+            'stop': en_yakin_destek - (ortalama_fiyat * 0.005),
+            'destek': en_yakin_destek,
+            'direnc': en_yakin_direnc,
+            'mesafe': round(mesafe_destek, 2)
+        }
+    
+    # SHORT SİNYALİ (Dirence yakın ve düşüş)
+    elif mesafe_direnc < 1.5 and en_yakin_direnc and son_kapanis < onceki_kapanis:
+        scalp_sinyali = {
+            'tip': 'SHORT',
+            'giris': ortalama_fiyat,
+            'hedef': en_yakin_destek if en_yakin_destek else ortalama_fiyat * 0.98,
+            'stop': en_yakin_direnc + (ortalama_fiyat * 0.005),
+            'destek': en_yakin_destek,
+            'direnc': en_yakin_direnc,
+            'mesafe': round(mesafe_direnc, 2)
+        }
+
+# ==================== SCALP SİNYALİ GÖSTER ====================
+if scalp_sinyali:
+    st.markdown("---")
+    if scalp_sinyali['tip'] == 'LONG':
+        st.success(f"🎯 **GÜNCEL LONG SCALP SİNYALİ - {coin_adi}**")
+    else:
+        st.error(f"🎯 **GÜNCEL SHORT SCALP SİNYALİ - {coin_adi}**")
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("📍 Giriş Fiyatı", f"${scalp_sinyali['giris']:,.2f}")
+        st.metric("🎯 Hedef", f"${scalp_sinyali['hedef']:,.2f}")
+    with col2:
+        st.metric("🛑 Stop Loss", f"${scalp_sinyali['stop']:,.2f}")
+        if scalp_sinyali['destek']:
+            st.metric("🟢 Destek", f"${scalp_sinyali['destek']:,.2f}")
+    with col3:
+        if scalp_sinyali['direnc']:
+            st.metric("🔴 Direnç", f"${scalp_sinyali['direnc']:,.2f}")
+        if scalp_sinyali['tip'] == 'LONG':
+            kar_orani = ((scalp_sinyali['hedef'] - scalp_sinyali['giris']) / scalp_sinyali['giris'] * 100)
+        else:
+            kar_orani = ((scalp_sinyali['giris'] - scalp_sinyali['hedef']) / scalp_sinyali['giris'] * 100)
+        st.metric("📈 Potansiyel Kar", f"%{kar_orani:.2f}")
+        st.metric("📊 Mesafe", f"%{scalp_sinyali['mesafe']}")
+else:
+    if scalp_acik:
+        st.info("🔍 Şu anda scalp sinyali yok")
 
 # ==================== DESTEK/DİRENÇ GÖSTER ====================
 st.markdown("---")
@@ -186,49 +274,35 @@ st.subheader("📊 DESTEK/DİRENÇ SEVİYELERİ (4 Borsa)")
 col_sup, col_res = st.columns(2)
 
 with col_sup:
-    st.markdown("### 🟢 DESTEK SEVİYELERİ")
+    st.markdown("### 🟢 DESTEK")
     if tum_destek_seviyeleri:
-        for seviye, guc in tum_destek_seviyeleri[:12]:
+        for seviye, guc in tum_destek_seviyeleri[:10]:
             if guc == 4:
-                st.markdown(f"**🔥 ${seviye:,.2f}** - {guc}/4 borsa (Çok Güçlü - Tüm borsalar)")
+                st.markdown(f"**🔥 ${seviye:,.2f}** - {guc}/4 (Çok Güçlü)")
             elif guc == 3:
-                st.markdown(f"**✅ ${seviye:,.2f}** - {guc}/4 borsa (Güçlü)")
+                st.markdown(f"**✅ ${seviye:,.2f}** - {guc}/4 (Güçlü)")
             elif guc == 2:
-                st.markdown(f"**🟡 ${seviye:,.2f}** - {guc}/4 borsa (Orta)")
+                st.markdown(f"**🟡 ${seviye:,.2f}** - {guc}/4 (Orta)")
             else:
-                st.markdown(f"**⚪ ${seviye:,.2f}** - {guc}/4 borsa (Zayıf)")
+                st.markdown(f"**⚪ ${seviye:,.2f}** - {guc}/4 (Zayıf)")
     else:
-        st.info("🔍 Destek seviyesi bulunamadı")
-    
-    st.caption(f"Toplam {len(tum_destek_seviyeleri)} destek seviyesi")
+        st.info("Destek bulunamadı")
 
 with col_res:
-    st.markdown("### 🔴 DİRENÇ SEVİYELERİ")
+    st.markdown("### 🔴 DİRENÇ")
     if tum_direnc_seviyeleri:
-        for seviye, guc in tum_direnc_seviyeleri[:12]:
+        for seviye, guc in tum_direnc_seviyeleri[:10]:
             if guc == 4:
-                st.markdown(f"**🔥 ${seviye:,.2f}** - {guc}/4 borsa (Çok Güçlü - Tüm borsalar)")
+                st.markdown(f"**🔥 ${seviye:,.2f}** - {guc}/4 (Çok Güçlü)")
             elif guc == 3:
-                st.markdown(f"**✅ ${seviye:,.2f}** - {guc}/4 borsa (Güçlü)")
+                st.markdown(f"**✅ ${seviye:,.2f}** - {guc}/4 (Güçlü)")
             elif guc == 2:
-                st.markdown(f"**🟡 ${seviye:,.2f}** - {guc}/4 borsa (Orta)")
+                st.markdown(f"**🟡 ${seviye:,.2f}** - {guc}/4 (Orta)")
             else:
-                st.markdown(f"**⚪ ${seviye:,.2f}** - {guc}/4 borsa (Zayıf)")
+                st.markdown(f"**⚪ ${seviye:,.2f}** - {guc}/4 (Zayıf)")
     else:
-        st.info("🔍 Direnç seviyesi bulunamadı")
-    
-    st.caption(f"Toplam {len(tum_direnc_seviyeleri)} direnç seviyesi")
+        st.info("Direnç bulunamadı")
 
-# ==================== ÖZET BİLGİ ====================
+# ==================== ÖZET ====================
 st.markdown("---")
-st.info(f"""
-**📊 ÖZET:**
-- 🔥 **4/4 borsa** = Tüm borsalarda görülen seviye (Çok Güçlü)
-- ✅ **3/4 borsa** = 3 borsada görülen seviye (Güçlü)
-- 🟡 **2/4 borsa** = 2 borsada görülen seviye (Orta)
-- ⚪ **1/4 borsa** = Tek borsada görülen seviye (Zayıf)
-
-**📌 Toplam:** {len(tum_destek_seviyeleri)} destek + {len(tum_direnc_seviyeleri)} direnç seviyesi bulundu.
-""")
-
-st.caption("💡 **Nasıl çalışır?** 4 borsanın (Binance, Bybit, Bitget, OKX) verileri kullanılır. Her seviyenin kaç borsada görüldüğü belirtilir.")
+st.caption(f"💡 **Toplam:** {len(tum_destek_seviyeleri)} destek + {len(tum_direnc_seviyeleri)} direnç | Scalp sinyalleri sadece {', '.join(coin_listesi)} coinleri için üretilir.")
