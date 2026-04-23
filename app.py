@@ -24,12 +24,19 @@ def telegram_mesaj_gonder(mesaj):
     except:
         return False
 
-# ==================== BAŞLIK ====================
-st.title("⚡ ULTRA SCALP BOT (15dk + 1s onay)")
-st.markdown("**4 Borsa | Güçlü sinyaller (70+ puan) | Hedef/Stop ATR bazlı**")
-
-# ==================== COİN LİSTESİ ====================
-coin_listesi = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "ZEC/USDT", "APT/USDT", "SUI/USDT"]
+# ==================== BYBIT TESTNET (GERÇEK API KEY'İNİ BURAYA YAZ) ====================
+bybit_testnet = ccxt.bybit({
+    'apiKey': 'HkuaWOvrDwCxjnY3Vq',      # ← API Key'ini buraya yapıştır
+    'secret': 'hEnZFnQO2SRVgdVvcdD2foaJ03U0D3MPOAhs',       # ← Secret'ını buraya yapıştır
+    'enableRateLimit': True,
+    'options': {'defaultType': 'spot'},
+    'urls': {
+        'api': {
+            'public': 'https://api-testnet.bybit.com',
+            'private': 'https://api-testnet.bybit.com',
+        }
+    }
+})
 
 # ==================== BORSALAR ====================
 BORSALAR = {
@@ -43,14 +50,18 @@ BORSALAR = {
 if 'gonderilen_sinyaller' not in st.session_state:
     st.session_state.gonderilen_sinyaller = []
 
+# ==================== BAŞLIK ====================
+st.title("⚡ ULTRA SCALP BOT + TESTNET İŞLEM")
+st.markdown("**4 Borsa | 15dk+1s onay | Güçlü sinyaller (70+ puan) | Hedef/Stop + Testnet İşlem**")
+
 # ==================== KENAR ÇUBUĞU ====================
 with st.sidebar:
     st.header("⚙️ AYARLAR")
-    secilen_coin = st.selectbox("💰 Coin:", coin_listesi, index=0)
+    secilen_coin = st.selectbox("💰 Coin:", ["BTC/USDT", "ETH/USDT", "SOL/USDT", "ZEC/USDT", "APT/USDT", "SUI/USDT"], index=0)
     coin_adi = secilen_coin.split("/")[0]
     st.markdown("---")
-    st.success("**15dk sinyal + 1s onay**")
-    st.info("Göstergeler: RSI, MACD, EMA, ADX, StochRSI, Hacim, Likidite (simülasyon)")
+    st.success("✅ Bybit Testnet bağlı")
+    st.info("Sinyal gelince otomatik işlem açılır")
     if st.button("🔄 Yenile", use_container_width=True):
         st.rerun()
     st.caption(f"🕐 {datetime.now().strftime('%H:%M:%S')}")
@@ -165,6 +176,27 @@ def trend_onay_1s(sembol):
             return "YUKARI" if son_kapanis > ma20 else "AGI"
     return "YATAY"
 
+def testnet_islem_ac(sinyal):
+    """Sinyal geldiğinde Bybit Testnet'te işlem açar"""
+    try:
+        sembol = sinyal['coin']
+        yon = sinyal['tip'].lower()
+        miktar = 0.001  # 0.001 BTC (testnet için küçük miktar)
+        
+        if yon == 'long':
+            bybit_testnet.create_market_buy_order(sembol, miktar)
+            bybit_testnet.create_order(sembol, 'stop_market', 'sell', miktar, None, {'stopPrice': sinyal['stop']})
+            bybit_testnet.create_order(sembol, 'limit', 'sell', miktar, sinyal['hedef'])
+        else:
+            bybit_testnet.create_market_sell_order(sembol, miktar)
+            bybit_testnet.create_order(sembol, 'stop_market', 'buy', miktar, None, {'stopPrice': sinyal['stop']})
+            bybit_testnet.create_order(sembol, 'limit', 'buy', miktar, sinyal['hedef'])
+        
+        return True
+    except Exception as e:
+        st.error(f"Testnet işlem hatası: {e}")
+        return False
+
 # ==================== CANLI FİYATLAR ====================
 st.subheader(f"💰 {coin_adi} CANLI FİYAT")
 cols = st.columns(4)
@@ -178,7 +210,7 @@ for idx, (borsa_adi, borsa) in enumerate(BORSALAR.items()):
 ortalama_fiyat = sum(anlik_fiyatlar)/len(anlik_fiyatlar) if anlik_fiyatlar else 0
 st.metric("📊 ORTALAMA", f"${ortalama_fiyat:,.2f}")
 
-# ==================== DESTEK/DİRENÇ (15dk) ====================
+# ==================== DESTEK/DİRENÇ ====================
 with st.spinner("Destek/Direnç analizi yapılıyor..."):
     tum_direncler, tum_destekler, son_df = [], [], None
     for borsa in BORSALAR.values():
@@ -188,7 +220,6 @@ with st.spinner("Destek/Direnç analizi yapılıyor..."):
             d, s = seviye_bul(df, order=12)
             tum_direncler.append(d)
             tum_destekler.append(s)
-    # Ortak seviyeler
     flat_direnc = [item for sub in tum_direncler for item in sub]
     flat_destek = [item for sub in tum_destekler for item in sub]
     direnc_sayac = Counter(flat_direnc)
@@ -199,7 +230,6 @@ with st.spinner("Destek/Direnç analizi yapılıyor..."):
 # ==================== SCALP SİNYALİ ====================
 scalp_sinyali = None
 if son_df is not None:
-    # Göstergeler
     rsi_val = rsi_hesapla(son_df).iloc[-1]
     _, _, hist = macd_hesapla(son_df)
     macd_trend = 1 if hist.iloc[-1] > 0 and hist.iloc[-1] > hist.iloc[-2] else (-1 if hist.iloc[-1] < 0 and hist.iloc[-1] < hist.iloc[-2] else 0)
@@ -210,7 +240,6 @@ if son_df is not None:
     atr_val = atr_hesapla(son_df)
     mum_yukselen = son_df['kapanis'].iloc[-1] > son_df['kapanis'].iloc[-2]
     
-    # En yakın destek/direnç
     en_yakin_destek = None
     for seviye, _ in tum_destek:
         if seviye < ortalama_fiyat:
@@ -224,11 +253,7 @@ if son_df is not None:
     
     mesafe_destek = ((ortalama_fiyat - en_yakin_destek) / ortalama_fiyat * 100) if en_yakin_destek else 100
     mesafe_direnc = ((en_yakin_direnc - ortalama_fiyat) / ortalama_fiyat * 100) if en_yakin_direnc else 100
-    
-    # 1 saat trend
     trend_1s = trend_onay_1s(secilen_coin)
-    
-    # Likidite puanları
     liq_long = likidite_simulasyonu(ortalama_fiyat, en_yakin_destek, 'long')
     liq_short = likidite_simulasyonu(ortalama_fiyat, en_yakin_direnc, 'short')
     
@@ -285,11 +310,13 @@ if son_df is not None:
             'trend_1s': trend_1s, 'likidite': 'Yakın' if liq_short>0 else 'Normal'
         }
 
-# ==================== TELEGRAM GÖNDER ====================
+# ==================== TELEGRAM + TESTNET İŞLEM ====================
 if scalp_sinyali:
     sig_id = f"{scalp_sinyali['coin']}_{scalp_sinyali['tip']}_{scalp_sinyali['fiyat']:.0f}"
     if sig_id not in st.session_state.gonderilen_sinyaller:
         st.session_state.gonderilen_sinyaller.append(sig_id)
+        
+        # Telegram mesajı
         msg = f"""🔥 <b>ÇOK GÜÇLÜ SCALP SİNYALİ!</b> 🔥
 
 <b>{'🟢 LONG' if scalp_sinyali['tip']=='LONG' else '🔴 SHORT'} {scalp_sinyali['coin']}</b>
@@ -308,7 +335,13 @@ if scalp_sinyali:
 
 ⏱️ {datetime.now().strftime('%H:%M:%S')} (15dk+1s onay)"""
         telegram_mesaj_gonder(msg)
-        st.success(f"✅ {scalp_sinyali['tip']} sinyali Telegram'a gönderildi (Puan: {scalp_sinyali['puan']})")
+        
+        # Testnet işlem aç
+        islem_acildi = testnet_islem_ac(scalp_sinyali)
+        if islem_acildi:
+            st.success(f"✅ {scalp_sinyali['tip']} sinyali Telegram'a gönderildi ve Testnet işlem açıldı!")
+        else:
+            st.success(f"✅ {scalp_sinyali['tip']} sinyali Telegram'a gönderildi (işlem açılamadı)")
 
 # ==================== SİNYAL GÖSTER ====================
 if scalp_sinyali:
@@ -340,4 +373,4 @@ with col2:
     for s, g in tum_direnc[:8]:
         st.markdown(f"{'🔥' if g>=4 else '✅' if g>=3 else '🟡' if g>=2 else '⚪'} **${s:,.2f}** ({g}/4)")
 
-st.caption("💡 Sinyal kriteri: 15dk + 1s onay, 7 gösterge, likidite simülasyonu, min 70 puan")
+st.caption("💡 Sinyal gelince: Telegram bildirimi + Bybit Testnet'te otomatik işlem açılır")
