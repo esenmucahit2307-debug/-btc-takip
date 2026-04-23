@@ -4,18 +4,17 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from scipy.signal import argrelextrema
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import Counter
 import time
+import json
+import os
 
 st.set_page_config(page_title="TradingView Tarzı Dashboard", layout="wide")
 
-# ==================== COİN LİSTESİ ====================
+# ==================== COİN LİSTESİ (SADECE SCALP COİNLER) ====================
 coin_listesi = [
-    "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT",
-    "DOGE/USDT", "ADA/USDT", "TON/USDT", "AVAX/USDT", "LINK/USDT",
-    "UNI/USDT", "AAVE/USDT", "MATIC/USDT", "ARB/USDT", "OP/USDT",
-    "PEPE/USDT", "WIF/USDT", "FLOKI/USDT", "SHIB/USDT", "SUI/USDT"
+    "BTC/USDT", "ETH/USDT", "SOL/USDT", "ZEC/USDT", "APT/USDT", "SUI/USDT"
 ]
 
 # ==================== 4 BORSA ====================
@@ -25,6 +24,40 @@ BORSALAR = {
     'Bitget': ccxt.bitget(),
     'OKX': ccxt.okx()
 }
+
+# ==================== SCALP KAYITLARI İÇİN JSON DOSYASI ====================
+SCALP_DOSYASI = "scalp_kayitlari.json"
+
+def scalp_kayitlarini_yukle():
+    """Geçmiş scalp sinyallerini yükler"""
+    try:
+        if os.path.exists(SCALP_DOSYASI):
+            with open(SCALP_DOSYASI, 'r') as f:
+                return json.load(f)
+        else:
+            return {}
+    except:
+        return {}
+
+def scalp_kaydet(coin_adi, sinyal):
+    """Yeni scalp sinyalini kaydeder"""
+    kayitlar = scalp_kayitlarini_yukle()
+    
+    if coin_adi not in kayitlar:
+        kayitlar[coin_adi] = []
+    
+    sinyal['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    kayitlar[coin_adi].append(sinyal)
+    
+    # Son 100 kaydı tut
+    if len(kayitlar[coin_adi]) > 100:
+        kayitlar[coin_adi] = kayitlar[coin_adi][-100:]
+    
+    try:
+        with open(SCALP_DOSYASI, 'w') as f:
+            json.dump(kayitlar, f, indent=2)
+    except:
+        pass
 
 # ==================== RENKLER ====================
 KALDIRAC_RENKLERI = {3: '#00FF00', 5: '#00CED1', 10: '#FFD700', 20: '#FF8C00', 50: '#FF0000'}
@@ -41,7 +74,7 @@ GUCLU_DIRENC_RENKLER = {
 
 # ==================== BAŞLIK ====================
 st.title("📈 TRADINGVIEW TARZI DASHBOARD")
-st.caption("Binance + Bybit + Bitget + OKX | Destek/Direnç | Liquidation | SCALP SİNYALLERİ | 1sn Fiyat Yenileme")
+st.caption("Binance + Bybit + Bitget + OKX | Destek/Direnç | Liquidation | SCALP SİNYALLERİ (Kayıtlı)")
 
 # ==================== KENAR ÇUBUĞU ====================
 with st.sidebar:
@@ -52,15 +85,13 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Zaman dilimleri (45 DK YOK)
     zaman_dilimleri = {
         "1 Dakika": "1m", "5 Dakika": "5m", "15 Dakika": "15m",
         "30 Dakika": "30m", "1 Saat": "1h", "2 Saat": "2h",
-        "4 Saat": "4h", "6 Saat": "6h", "12 Saat": "12h",
-        "1 Gün": "1d", "1 Hafta": "1w"
+        "4 Saat": "4h", "1 Gün": "1d", "1 Hafta": "1w"
     }
     
-    secili_zaman = st.selectbox("⏱️ Zaman dilimi:", list(zaman_dilimleri.keys()), index=4)
+    secili_zaman = st.selectbox("⏱️ Zaman dilimi:", list(zaman_dilimleri.keys()), index=3)
     tf_kodu = zaman_dilimleri[secili_zaman]
     
     st.markdown("---")
@@ -69,6 +100,7 @@ with st.sidebar:
     st.subheader("📊 Göstergeler")
     destek_acik = st.checkbox("🟢 Destek Çizgileri", value=True)
     direnc_acik = st.checkbox("🔴 Direnç Çizgileri", value=True)
+    scalp_goster = st.checkbox("🎯 Scalp Sinyallerini Göster", value=True)
     
     st.markdown("---")
     
@@ -77,7 +109,6 @@ with st.sidebar:
     liq_acik = st.checkbox("Liquidation Haritasını Göster", value=True)
     
     if liq_acik:
-        st.markdown("**Kaldıraç Çarpanları:**")
         col1, col2 = st.columns(2)
         with col1:
             k3x = st.checkbox("3x", value=True)
@@ -100,14 +131,7 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Scalp Sinyalleri
-    st.subheader("🎯 SCALP SİNYALLERİ")
-    scalp_acik = st.checkbox("Long/Short Scalp Sinyallerini Göster", value=True)
-    
-    st.markdown("---")
-    
-    # Yenileme ayarı
-    grafik_yenileme = st.select_slider("🔄 Grafik yenileme sıklığı:", options=[15, 30, 60, 120], value=30)
+    yenileme_araligi = st.select_slider("🔄 Yenileme sıklığı:", options=[15, 30, 60, 120], value=30)
     
     if st.button("🔄 Şimdi Yenile", use_container_width=True):
         st.rerun()
@@ -122,7 +146,7 @@ def veri_cek(borsa, sembol, zaman_dilimi, limit=500):
         df['zaman'] = pd.to_datetime(df['zaman'], unit='ms')
         df.set_index('zaman', inplace=True)
         return df
-    except Exception as e:
+    except:
         return None
 
 def anlik_fiyat_al(borsa, sembol):
@@ -174,7 +198,7 @@ def ortak_seviye_bul(tum_direncler, tum_destekler, min_guc=3):
     return ortak_direnc, ortak_destek
 
 def tasfiye_hesapla(guncel_fiyat, kaldiraclar, coin_adi):
-    base_oi = {"BTC": 15000000000, "ETH": 8000000000, "BNB": 2000000000, "SOL": 2000000000}
+    base_oi = {"BTC": 15000000000, "ETH": 8000000000, "SOL": 2000000000}
     oi = base_oi.get(coin_adi, 500000000)
     oran = {3: 0.15, 5: 0.25, 10: 0.35, 20: 0.15, 50: 0.10}
     
@@ -191,14 +215,17 @@ def tasfiye_hesapla(guncel_fiyat, kaldiraclar, coin_adi):
     
     return {'long': sorted(long_tasfiye, key=lambda x: x['fiyat'], reverse=True), 'short': sorted(short_tasfiye, key=lambda x: x['fiyat'])}
 
-def scalp_sinyalleri_uret(df, guncel_fiyat, destekler, direncler):
-    sinyaller = {'long': [], 'short': []}
+def scalp_sinyali_uret(df, guncel_fiyat, destekler, direncler, coin_adi):
+    """Yeni scalp sinyali üretir ve kaydeder"""
+    sinyal = None
     
     if df is None or len(df) < 20:
-        return sinyaller
+        return sinyal
     
     son_kapanis = df['kapanis'].iloc[-1]
     onceki_kapanis = df['kapanis'].iloc[-2]
+    son_yuksek = df['yuksek'].iloc[-1]
+    son_dusuk = df['dusuk'].iloc[-1]
     
     ma_short = df['kapanis'].rolling(5).mean().iloc[-1]
     ma_long = df['kapanis'].rolling(20).mean().iloc[-1]
@@ -219,70 +246,55 @@ def scalp_sinyalleri_uret(df, guncel_fiyat, destekler, direncler):
     mesafe_destek = ((guncel_fiyat - en_yakin_destek) / guncel_fiyat * 100) if en_yakin_destek else 100
     mesafe_direnc = ((en_yakin_direnc - guncel_fiyat) / guncel_fiyat * 100) if en_yakin_direnc else 100
     
-    # LONG SİNYALLERİ
-    if son_kapanis > onceki_kapanis * 1.001:
-        sinyaller['long'].append({
-            'seviye': '🟢 HAFİF LONG',
-            'neden': '📈 Fiyat yükseliş trendinde',
-            'hedef': en_yakin_direnc if en_yakin_direnc else guncel_fiyat * 1.01,
-            'zarar_kes': en_yakin_destek if en_yakin_destek else guncel_fiyat * 0.99
-        })
+    nearest_lq_upper = en_yakin_direnc if en_yakin_direnc else guncel_fiyat * 1.05
+    nearest_lq_lower = en_yakin_destek if en_yakin_destek else guncel_fiyat * 0.95
     
-    if mesafe_destek < 1.5 and en_yakin_destek:
-        sinyaller['long'].append({
-            'seviye': '🟢 GÜÇLÜ LONG',
-            'neden': f'🔥 Destek bölgesine yakın ({mesafe_destek:.1f}%)',
+    # LONG SİNYALİ
+    if mesafe_destek < 1.5 and en_yakin_destek and son_kapanis > onceki_kapanis:
+        sinyal = {
+            'tip': 'LONG',
+            'fiyat': guncel_fiyat,
             'hedef': en_yakin_direnc if en_yakin_direnc else guncel_fiyat * 1.02,
-            'zarar_kes': en_yakin_destek - (guncel_fiyat * 0.005)
-        })
+            'zarar_kes': en_yakin_destek - (guncel_fiyat * 0.005),
+            'nearest_lq_upper': nearest_lq_upper,
+            'nearest_lq_lower': nearest_lq_lower,
+            'up_distance': round((nearest_lq_upper - guncel_fiyat) / guncel_fiyat * 100, 2),
+            'dn_distance': round((guncel_fiyat - nearest_lq_lower) / guncel_fiyat * 100, 2),
+            'destek': en_yakin_destek,
+            'direnc': en_yakin_direnc
+        }
     
-    if trend_yukari:
-        sinyaller['long'].append({
-            'seviye': '🟡 ORTA LONG',
-            'neden': '📊 Genel trend yukarı yönlü',
-            'hedef': en_yakin_direnc if en_yakin_direnc else guncel_fiyat * 1.015,
-            'zarar_kes': en_yakin_destek if en_yakin_destek else guncel_fiyat * 0.995
-        })
-    
-    # SHORT SİNYALLERİ
-    if son_kapanis < onceki_kapanis * 0.999:
-        sinyaller['short'].append({
-            'seviye': '🔴 HAFİF SHORT',
-            'neden': '📉 Fiyat düşüş trendinde',
-            'hedef': en_yakin_destek if en_yakin_destek else guncel_fiyat * 0.99,
-            'zarar_kes': en_yakin_direnc if en_yakin_direnc else guncel_fiyat * 1.01
-        })
-    
-    if mesafe_direnc < 1.5 and en_yakin_direnc:
-        sinyaller['short'].append({
-            'seviye': '🔴 GÜÇLÜ SHORT',
-            'neden': f'🔥 Direnç bölgesine yakın ({mesafe_direnc:.1f}%)',
+    # SHORT SİNYALİ
+    elif mesafe_direnc < 1.5 and en_yakin_direnc and son_kapanis < onceki_kapanis:
+        sinyal = {
+            'tip': 'SHORT',
+            'fiyat': guncel_fiyat,
             'hedef': en_yakin_destek if en_yakin_destek else guncel_fiyat * 0.98,
-            'zarar_kes': en_yakin_direnc + (guncel_fiyat * 0.005)
-        })
+            'zarar_kes': en_yakin_direnc + (guncel_fiyat * 0.005),
+            'nearest_lq_upper': nearest_lq_upper,
+            'nearest_lq_lower': nearest_lq_lower,
+            'up_distance': round((nearest_lq_upper - guncel_fiyat) / guncel_fiyat * 100, 2),
+            'dn_distance': round((guncel_fiyat - nearest_lq_lower) / guncel_fiyat * 100, 2),
+            'destek': en_yakin_destek,
+            'direnc': en_yakin_direnc
+        }
     
-    if not trend_yukari and ma_short < ma_long:
-        sinyaller['short'].append({
-            'seviye': '🟠 ORTA SHORT',
-            'neden': '📊 Genel trend aşağı yönlü',
-            'hedef': en_yakin_destek if en_yakin_destek else guncel_fiyat * 0.985,
-            'zarar_kes': en_yakin_direnc if en_yakin_direnc else guncel_fiyat * 1.005
-        })
-    
-    return sinyaller
+    return sinyal
 
-def grafik_ciz(df, baslik, direncler, destekler, tasfiye, guncel_fiyat, destek_acik, direnc_acik, liq_acik):
+def grafik_ciz(df, baslik, direncler, destekler, tasfiye, guncel_fiyat, destek_acik, direnc_acik, liq_acik, scalp_sinyalleri, coin_adi):
     if df is None or len(df) == 0:
         fig = go.Figure()
         return fig
     
     fig = go.Figure()
     
+    # Mum grafiği
     fig.add_trace(go.Candlestick(
         x=df.index, open=df['acilis'], high=df['yuksek'],
         low=df['dusuk'], close=df['kapanis'], name='Fiyat'
     ))
     
+    # Destekler
     if destek_acik:
         for seviye, guc in destekler:
             renk = GUCLU_RENKLER.get(guc, GUCLU_RENKLER[3])['renk']
@@ -291,6 +303,7 @@ def grafik_ciz(df, baslik, direncler, destekler, tasfiye, guncel_fiyat, destek_a
             fig.add_hline(y=seviye, line_dash="solid", line_color=renk, line_width=kalinlik,
                          annotation_text=f"🟢 {etiket} {seviye:.2f}", annotation_position="top right")
     
+    # Dirençler
     if direnc_acik:
         for seviye, guc in direncler:
             renk = GUCLU_DIRENC_RENKLER.get(guc, GUCLU_DIRENC_RENKLER[3])['renk']
@@ -299,6 +312,7 @@ def grafik_ciz(df, baslik, direncler, destekler, tasfiye, guncel_fiyat, destek_a
             fig.add_hline(y=seviye, line_dash="solid", line_color=renk, line_width=kalinlik,
                          annotation_text=f"🔴 {etiket} {seviye:.2f}", annotation_position="top right")
     
+    # Liquidation
     if liq_acik:
         for item in tasfiye.get('long', []):
             fig.add_hline(y=item['fiyat'], line_dash="dash", line_color=item['renk'], line_width=2,
@@ -307,11 +321,45 @@ def grafik_ciz(df, baslik, direncler, destekler, tasfiye, guncel_fiyat, destek_a
             fig.add_hline(y=item['fiyat'], line_dash="dash", line_color=item['renk'], line_width=2,
                          annotation_text=f"💀 SHORT {item['kaldirac']}x", annotation_position="top left")
     
+    # GEÇMİŞ SCALP SİNYALLERİ (grafik üzerinde etiket olarak)
+    if coin_adi in scalp_sinyalleri:
+        for sinyal in scalp_sinyalleri[coin_adi][-20:]:  # Son 20 sinyal
+            try:
+                sinyal_fiyat = sinyal.get('fiyat', 0)
+                sinyal_tip = sinyal.get('tip', '')
+                sinyal_zaman = sinyal.get('timestamp', '')
+                
+                if sinyal_tip == 'LONG':
+                    renk = '#00FF00'
+                    sembol = '▲'
+                else:
+                    renk = '#FF0000'
+                    sembol = '▼'
+                
+                # Grafikte nokta ve etiket
+                fig.add_annotation(
+                    x=df.index[-1],
+                    y=sinyal_fiyat,
+                    text=f"{sembol} {sinyal_tip} @ {sinyal_fiyat:.0f}",
+                    showarrow=True,
+                    arrowhead=2,
+                    arrowsize=1,
+                    arrowwidth=2,
+                    arrowcolor=renk,
+                    ax=20,
+                    ay=(-30 if sinyal_tip == 'LONG' else 30),
+                    bgcolor='rgba(0,0,0,0.7)',
+                    font=dict(color=renk, size=10)
+                )
+            except:
+                pass
+    
+    # Güncel fiyat
     fig.add_hline(y=guncel_fiyat, line_dash="dot", line_color="white", line_width=1.5,
                  annotation_text=f"📍 GÜNCEL {guncel_fiyat:.2f}", annotation_position="top left")
     
     fig.update_layout(
-        height=650,
+        height=700,
         title=dict(text=baslik, x=0.5, xanchor='center'),
         template="plotly_dark",
         paper_bgcolor='#131722',
@@ -331,10 +379,12 @@ def grafik_ciz(df, baslik, direncler, destekler, tasfiye, guncel_fiyat, destek_a
 
 # ==================== ANA İŞLEM ====================
 
-# Canlı fiyatlar (1 saniye)
-st.subheader(f"💰 {coin_adi} CANLI FİYAT (1 Saniye Güncelleme)")
+# Geçmiş scalp sinyallerini yükle
+scalp_kayitlari = scalp_kayitlarini_yukle()
 
-# Canlı fiyatları göster
+# Canlı fiyatlar
+st.subheader(f"💰 {coin_adi} CANLI FİYAT")
+
 son_fiyatlar = {}
 for borsa_adi, borsa in BORSALAR.items():
     fiyat, degisim = anlik_fiyat_al(borsa, secilen_coin)
@@ -353,70 +403,12 @@ col1, col2, col3, col4 = st.columns(4)
 with col1: st.metric("💰 Ortalama", f"${ortalama_fiyat:,.2f}")
 with col2: st.metric("⏱️ Zaman", secili_zaman)
 with col3: st.metric("🏛️ Borsa", "4 Borsa")
-with col4: st.metric("🔄 Yenileme", f"{grafik_yenileme} sn")
+with col4: st.metric("🔄 Yenileme", f"{yenileme_araligi} sn")
 
 st.markdown("---")
 
-# ==================== SCALP SİNYALLERİ ====================
-if scalp_acik:
-    st.subheader("🎯 LONG/SHORT SCALP SİNYALLERİ")
-    
-    gecici_df = None
-    for borsa in BORSALAR.values():
-        df = veri_cek(borsa, secilen_coin, '15m', limit=50)
-        if df is not None:
-            gecici_df = df
-            break
-    
-    if gecici_df is not None:
-        gecici_direncler = []
-        gecici_destekler = []
-        for borsa in BORSALAR.values():
-            df = veri_cek(borsa, secilen_coin, '15m', limit=100)
-            if df is not None:
-                d, s = seviye_bul(df, order=10)
-                gecici_direncler.append(d)
-                gecici_destekler.append(s)
-        
-        g_ortak_direnc, g_ortak_destek = ortak_seviye_bul(gecici_direncler, gecici_destekler, min_guc=2)
-        sinyaller = scalp_sinyalleri_uret(gecici_df, ortalama_fiyat, g_ortak_destek, g_ortak_direnc)
-        
-        col_long, col_short = st.columns(2)
-        
-        with col_long:
-            st.markdown("### 📈 LONG SİNYALLERİ")
-            if sinyaller['long']:
-                for s in sinyaller['long'][:3]:
-                    st.markdown(f"""
-                    <div style='background-color:#1a3d1a; border-left: 4px solid #00FF00; padding: 8px; margin: 5px 0; border-radius: 5px;'>
-                    <b>{s['seviye']}</b><br>
-                    📌 {s['neden']}<br>
-                    🎯 Hedef: <b>${s['hedef']:,.2f}</b> | 🛑 Stop: <b>${s['zarar_kes']:,.2f}</b>
-                    </div>
-                    """, unsafe_allow_html=True)
-            else:
-                st.info("🟡 Şu anda LONG sinyali yok")
-        
-        with col_short:
-            st.markdown("### 📉 SHORT SİNYALLERİ")
-            if sinyaller['short']:
-                for s in sinyaller['short'][:3]:
-                    st.markdown(f"""
-                    <div style='background-color:#3d1a1a; border-left: 4px solid #FF0000; padding: 8px; margin: 5px 0; border-radius: 5px;'>
-                    <b>{s['seviye']}</b><br>
-                    📌 {s['neden']}<br>
-                    🎯 Hedef: <b>${s['hedef']:,.2f}</b> | 🛑 Stop: <b>${s['zarar_kes']:,.2f}</b>
-                    </div>
-                    """, unsafe_allow_html=True)
-            else:
-                st.info("🟠 Şu anda SHORT sinyali yok")
-    else:
-        st.warning("Sinyaller için veri bekleniyor...")
-    
-    st.markdown("---")
-
 # ==================== VERİ ÇEKME ====================
-with st.spinner(f"📊 {coin_adi} {secili_zaman} verileri yükleniyor..."):
+with st.spinner(f"📊 {coin_adi} verileri yükleniyor..."):
     tum_direncler, tum_destekler, ana_df = [], [], None
     
     for borsa_adi, borsa in BORSALAR.items():
@@ -425,7 +417,6 @@ with st.spinner(f"📊 {coin_adi} {secili_zaman} verileri yükleniyor..."):
             if ana_df is None:
                 ana_df = df
             
-            # Zaman dilimine göre order değeri
             if tf_kodu in ['1m', '5m']:
                 order_val = 8
             elif tf_kodu in ['15m', '30m']:
@@ -439,23 +430,79 @@ with st.spinner(f"📊 {coin_adi} {secili_zaman} verileri yükleniyor..."):
             tum_direncler.append(direnc)
             tum_destekler.append(destek)
     
-    # Sadece güçlü seviyeler (3+ borsa)
     ortak_direnc, ortak_destek = ortak_seviye_bul(tum_direncler, tum_destekler, min_guc=3)
     
-    # Tasfiye
     if liq_acik and secili_kaldiraclar:
         tasfiye = tasfiye_hesapla(ortalama_fiyat, secili_kaldiraclar, coin_adi)
     else:
         tasfiye = {'long': [], 'short': []}
+    
+    # YENİ SCALP SİNYALİ ÜRET (sadece seçili coinler için)
+    yeni_sinyal = None
+    if scalp_goster and ana_df is not None:
+        yeni_sinyal = scalp_sinyali_uret(ana_df, ortalama_fiyat, ortak_destek, ortak_direnc, coin_adi)
+        
+        if yeni_sinyal:
+            # Daha önce aynı sinyal kaydedilmemiş mi kontrol et
+            kayitlar = scalp_kayitlari.get(coin_adi, [])
+            son_sinyal = kayitlar[-1] if kayitlar else None
+            
+            if not son_sinyal or abs(son_sinyal.get('fiyat', 0) - yeni_sinyal['fiyat']) > ortalama_fiyat * 0.005:
+                scalp_kaydet(coin_adi, yeni_sinyal)
+                scalp_kayitlari = scalp_kayitlarini_yukle()
+                st.success(f"🎯 YENİ {yeni_sinyal['tip']} SCALP SİNYALİ! Fiyat: ${yeni_sinyal['fiyat']:,.2f}")
+                time.sleep(2)
+                st.rerun()
 
 # ==================== GRAFİK ====================
 st.subheader("📈 Mum Grafiği - Fare ile kaydır, çift tıkla sıfırla")
 
 if ana_df is not None and len(ana_df) > 0:
-    fig = grafik_ciz(ana_df, f"{coin_adi}/USDT - {secili_zaman} ({len(ana_df)} Bar)", ortak_direnc, ortak_destek, tasfiye, ortalama_fiyat, destek_acik, direnc_acik, liq_acik)
+    fig = grafik_ciz(ana_df, f"{coin_adi}/USDT - {secili_zaman}", ortak_direnc, ortak_destek, tasfiye, ortalama_fiyat, destek_acik, direnc_acik, liq_acik, scalp_kayitlari, coin_adi)
     
     config = {'scrollZoom': True, 'doubleClick': 'reset', 'displayModeBar': True, 'displaylogo': False, 'responsive': True}
     st.plotly_chart(fig, use_container_width=True, config=config)
+    
+    # ==================== GÜNCEL SCALP SİNYALİ (RESİMDEKİ GİBİ) ====================
+    if yeni_sinyal:
+        st.markdown("---")
+        st.subheader(f"🎯 GÜNCEL {yeni_sinyal['tip']} SCALP SİNYALİ")
+        
+        col_a, col_b, col_c = st.columns(3)
+        
+        with col_a:
+            st.metric("📍 Giriş Fiyatı", f"${yeni_sinyal['fiyat']:,.2f}")
+            st.metric("🎯 Hedef", f"${yeni_sinyal['hedef']:,.2f}")
+            st.metric("🛑 Stop Loss", f"${yeni_sinyal['zarar_kes']:,.2f}")
+        
+        with col_b:
+            st.metric("📊 Nearest LQ Upper", f"${yeni_sinyal['nearest_lq_upper']:,.2f}")
+            st.metric("📊 Nearest LQ Lower", f"${yeni_sinyal['nearest_lq_lower']:,.2f}")
+        
+        with col_c:
+            st.metric("⬆️ Up Distance", f"%{yeni_sinyal['up_distance']}")
+            st.metric("⬇️ Dn Distance", f"%{yeni_sinyal['dn_distance']}")
+            st.metric("🟢 Destek", f"${yeni_sinyal['destek']:,.2f}" if yeni_sinyal['destek'] else "-")
+            st.metric("🔴 Direnç", f"${yeni_sinyal['direnc']:,.2f}" if yeni_sinyal['direnc'] else "-")
+    
+    # ==================== GEÇMİŞ SCALP SİNYALLERİ LİSTESİ ====================
+    if scalp_goster and coin_adi in scalp_kayitlari and scalp_kayitlari[coin_adi]:
+        st.markdown("---")
+        st.subheader(f"📜 GEÇMİŞ {coin_adi} SCALP SİNYALLERİ")
+        
+        for sinyal in reversed(scalp_kayitlari[coin_adi][-20:]):
+            if sinyal['tip'] == 'LONG':
+                renk = "🟢"
+            else:
+                renk = "🔴"
+            
+            st.markdown(f"""
+            <div style='border-left: 4px solid {'#00FF00' if sinyal['tip'] == 'LONG' else '#FF0000'}; padding: 8px; margin: 5px 0; border-radius: 5px;'>
+            <b>{renk} {sinyal['tip']} SCALP</b> | 🕐 {sinyal['timestamp']}<br>
+            📍 Fiyat: <b>${sinyal['fiyat']:,.2f}</b> | 🎯 Hedef: <b>${sinyal['hedef']:,.2f}</b> | 🛑 Stop: <b>${sinyal['zarar_kes']:,.2f}</b><br>
+            📊 Nearest LQ: ↑${sinyal['nearest_lq_upper']:,.0f} (↑{sinyal['up_distance']}%) | ↓${sinyal['nearest_lq_lower']:,.0f} (↓{sinyal['dn_distance']}%)
+            </div>
+            """, unsafe_allow_html=True)
     
     # Destek Listesi
     if destek_acik and ortak_destek:
@@ -491,17 +538,17 @@ if ana_df is not None and len(ana_df) > 0:
             for item in tasfiye['short'][:5]:
                 st.markdown(f"<span style='color:{item['renk']}'>⚡ {item['kaldirac']}x</span> | ${item['fiyat']:,.0f} | ${item['hacim']/1e6:.0f}M", unsafe_allow_html=True)
 else:
-    st.error(f"❌ {secili_zaman} için veri alınamadı. Lütfen farklı zaman dilimi seçin.")
+    st.error(f"❌ {secili_zaman} için veri alınamadı.")
 
 # ==================== OTOMATİK YENİLEME ====================
 if 'son_yenileme' not in st.session_state:
     st.session_state.son_yenileme = time.time()
 
 gecen_sure = time.time() - st.session_state.son_yenileme
-if gecen_sure > grafik_yenileme:
+if gecen_sure > yenileme_araligi:
     st.session_state.son_yenileme = time.time()
     st.rerun()
 else:
-    st.info(f"🔄 Grafik {int(grafik_yenileme - gecen_sure)} saniye içinde yenilenecek... (Fiyatlar 1 saniyede bir güncellenir)")
+    st.info(f"🔄 Grafik {int(yenileme_araligi - gecen_sure)} saniye içinde yenilenecek...")
 
-st.caption("💡 **Tüm Özellikler:** TradingView grafik | 4 Borsa (Binance, Bybit, Bitget, OKX) | Güçlü D/D (3+ Borsa) | Liquidation | Long/Short Scalp Sinyalleri | 1sn fiyat yenileme")
+st.caption("💡 **Scalp Sinyalleri:** Destek/Direnç yakınlığına göre otomatik üretilir | Geçmiş sinyaller kaydedilir | Grafik üzerinde etiket olarak görünür")
