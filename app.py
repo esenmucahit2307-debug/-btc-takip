@@ -6,13 +6,15 @@ from scipy.signal import argrelextrema
 from datetime import datetime
 from collections import Counter
 import time
+import asyncio
+import json
 from streamlit.components.v1 import html
 
 st.set_page_config(page_title="Canlı Kripto Dashboard", layout="wide")
 
 # ==================== BAŞLIK ====================
 st.title("📈 CANLI KRİPTO DASHBOARD")
-st.markdown("**Binance + Bybit + Bitget + OKX** | Gerçek anlık grafik | Güçlü Destek/Direnç (3+ Borsa) | Scalp Sinyalleri")
+st.markdown("**Binance + Bybit + Bitget + OKX** | Gerçek anlık fiyatlar | Güçlü Destek/Direnç (3+ Borsa)")
 
 # ==================== COİN LİSTESİ ====================
 coin_listesi = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "ZEC/USDT", "APT/USDT", "SUI/USDT"]
@@ -25,12 +27,6 @@ BORSALAR = {
     'OKX': ccxt.okx()
 }
 
-# ==================== OTURUM BAŞLANGIÇ ====================
-if 'yenileme_zamani' not in st.session_state:
-    st.session_state.yenileme_zamani = time.time()
-if 'sayac' not in st.session_state:
-    st.session_state.sayac = 10
-
 # ==================== KENAR ÇUBUĞU ====================
 with st.sidebar:
     st.header("⚙️ AYARLAR")
@@ -41,15 +37,14 @@ with st.sidebar:
     st.markdown("---")
     
     zaman_dilimleri = {
-        "1 Dakika": "1m", "5 Dakika": "5m", "15 Dakika": "15m",
-        "30 Dakika": "30m", "1 Saat": "1h", "4 Saat": "4h",
-        "1 Gün": "1d", "1 Hafta": "1w"
+        "5 Dakika": "5m", "15 Dakika": "15m", "30 Dakika": "30m",
+        "1 Saat": "1h", "4 Saat": "4h", "1 Gün": "1d", "1 Hafta": "1w"
     }
     
-    secili_zaman = st.selectbox("⏱️ Zaman dilimi:", list(zaman_dilimleri.keys()), index=3)
+    secili_zaman = st.selectbox("⏱️ Zaman dilimi:", list(zaman_dilimleri.keys()), index=2)
     tf_kodu = zaman_dilimleri[secili_zaman]
     
-    tf_map = {"1m": "1", "5m": "5", "15m": "15", "30m": "30", "1h": "60", "4h": "240", "1d": "1D", "1w": "1W"}
+    tf_map = {"5m": "5", "15m": "15", "30m": "30", "1h": "60", "4h": "240", "1d": "1D", "1w": "1W"}
     tv_tf = tf_map.get(tf_kodu, "60")
     
     st.markdown("---")
@@ -57,20 +52,16 @@ with st.sidebar:
     st.subheader("📊 Göstergeler")
     destek_acik = st.checkbox("🟢 Destekleri Göster", value=True)
     direnc_acik = st.checkbox("🔴 Dirençleri Göster", value=True)
-    scalp_acik = st.checkbox("🎯 Scalp Sinyallerini Göster", value=True)
     
     st.markdown("---")
     
-    # Manuel yenileme butonu
-    if st.button("🔄 Şimdi Yenile", use_container_width=True):
-        st.session_state.yenileme_zamani = time.time()
+    if st.button("🔄 Yenile", use_container_width=True):
         st.rerun()
     
-    st.caption(f"🕐 Son güncelleme: {datetime.now().strftime('%H:%M:%S')}")
-    st.info("📌 Grafik CANLI olarak akar. Destek/Dirençler 10 saniyede bir otomatik yenilenir.")
+    st.caption(f"🕐 Son: {datetime.now().strftime('%H:%M:%S')}")
 
-# ==================== TRADINGVIEW CANLI GRAFİK ====================
-st.subheader(f"📊 {coin_adi} CANLI GRAFİK - {secili_zaman} (TradingView - Saniyelik Akış)")
+# ==================== TRADINGVIEW GRAFİK ====================
+st.subheader(f"📊 {coin_adi} GRAFİK - {secili_zaman}")
 
 tv_widget = f"""
 <div class="tradingview-widget-container">
@@ -79,27 +70,35 @@ tv_widget = f"""
   <script type="text/javascript">
   new TradingView.widget({{
     "width": "100%",
-    "height": 550,
+    "height": 500,
     "symbol": "BINANCE:{coin_adi}",
     "interval": "{tv_tf}",
     "timezone": "Europe/Istanbul",
     "theme": "dark",
     "style": "1",
     "locale": "tr",
-    "toolbar_bg": "#131722",
     "enable_publishing": false,
     "allow_symbol_change": false,
-    "container_id": "tradingview_chart",
-    "studies": [
-        "MASimple@tv-basicstudies",
-        "RSI@tv-basicstudies"
-    ]
+    "container_id": "tradingview_chart"
   }});
   </script>
 </div>
 """
+html(tv_widget, height=550)
 
-html(tv_widget, height=600)
+# ==================== CANLI FİYAT GÜNCELLEME ====================
+st.subheader(f"💰 {coin_adi} CANLI FİYATLAR")
+
+# Placeholder'lar
+fiyat_placeholders = {}
+for borsa_adi in BORSALAR.keys():
+    fiyat_placeholders[borsa_adi] = st.empty()
+
+# Bilgi placeholder'ı
+info_placeholder = st.empty()
+
+# Destek/direnç placeholder'ı
+dd_placeholder = st.empty()
 
 # ==================== FONKSİYONLAR ====================
 def veri_cek(borsa, sembol, zaman_dilimi, limit=200):
@@ -139,33 +138,18 @@ def anlik_fiyat_al(borsa, sembol):
     except:
         return None, None
 
-# ==================== CANLI FİYATLAR ====================
-st.subheader(f"💰 {coin_adi} CANLI FİYATLAR (1 saniye)")
-
-fiyat_cols = st.columns(4)
-anlik_fiyatlar = []
-for idx, (borsa_adi, borsa) in enumerate(BORSALAR.items()):
-    fiyat, degisim = anlik_fiyat_al(borsa, secilen_coin)
-    if fiyat:
-        anlik_fiyatlar.append(fiyat)
-        with fiyat_cols[idx]:
-            st.metric(borsa_adi, f"${fiyat:,.2f}", f"{degisim:.2f}%" if degisim else None)
-
-ortalama_fiyat = sum(anlik_fiyatlar) / len(anlik_fiyatlar) if anlik_fiyatlar else 0
-
-# ==================== DESTEK/DİRENÇ HESAPLAMA ====================
-with st.spinner("Güçlü Destek/Direnç seviyeleri hesaplanıyor..."):
+def destek_direnc_hesapla(coin, tf):
     tum_direncler, tum_destekler, ana_df = [], [], None
     
     for borsa_adi, borsa in BORSALAR.items():
-        df = veri_cek(borsa, secilen_coin, tf_kodu, limit=200)
+        df = veri_cek(borsa, coin, tf, limit=200)
         if df is not None and len(df) > 0:
             if ana_df is None:
                 ana_df = df
             
-            if tf_kodu in ['1m', '5m']:
+            if tf in ['5m']:
                 order_val = 8
-            elif tf_kodu in ['15m', '30m']:
+            elif tf in ['15m', '30m']:
                 order_val = 10
             else:
                 order_val = 12
@@ -189,98 +173,60 @@ with st.spinner("Güçlü Destek/Direnç seviyeleri hesaplanıyor..."):
     
     ortak_direnc.sort(key=lambda x: x[1], reverse=True)
     ortak_destek.sort(key=lambda x: x[1], reverse=True)
+    
+    return ortak_direnc, ortak_destek, ana_df
 
-# ==================== DESTEK/DİRENÇ LİSTESİ ====================
+# ==================== DESTEK/DİRENÇ GÖSTER ====================
+def destek_direnc_goster(ortak_destek, ortak_direnc):
+    col_sup, col_res = st.columns(2)
+    
+    with col_sup:
+        st.markdown("### 🟢 DESTEK SEVİYELERİ (3+ Borsa)")
+        if ortak_destek:
+            for seviye, guc in ortak_destek[:6]:
+                if guc == 4:
+                    st.markdown(f"**🔥 ${seviye:,.2f}** - {guc}/4 borsa (Çok Güçlü)")
+                else:
+                    st.markdown(f"**✅ ${seviye:,.2f}** - {guc}/4 borsa (Güçlü)")
+        else:
+            st.info("🔍 Destek seviyesi bulunamadı")
+    
+    with col_res:
+        st.markdown("### 🔴 DİRENÇ SEVİYELERİ (3+ Borsa)")
+        if ortak_direnc:
+            for seviye, guc in ortak_direnc[:6]:
+                if guc == 4:
+                    st.markdown(f"**🔥 ${seviye:,.2f}** - {guc}/4 borsa (Çok Güçlü)")
+                else:
+                    st.markdown(f"**✅ ${seviye:,.2f}** - {guc}/4 borsa (Güçlü)")
+        else:
+            st.info("🔍 Direnç seviyesi bulunamadı")
+    
+    return col_sup, col_res
+
+# ==================== İLK YÜKLEME ====================
+ortak_direnc, ortak_destek, ana_df = destek_direnc_hesapla(secilen_coin, tf_kodu)
+
+# ==================== CANLI DÖNGÜ ====================
+info_placeholder.info("🔄 Canlı fiyatlar akıyor... Destek/Dirençler sayfa yenilendiğinde güncellenir.")
+
+# Sonsuz döngü ile canlı fiyat güncelleme
+for i in range(100):  # 100 döngü
+    # Fiyatları güncelle
+    for borsa_adi, borsa in BORSALAR.items():
+        fiyat, degisim = anlik_fiyat_al(borsa, secilen_coin)
+        if fiyat:
+            with fiyat_placeholders[borsa_adi]:
+                st.metric(borsa_adi, f"${fiyat:,.2f}", f"{degisim:.2f}%" if degisim else None)
+    
+    time.sleep(1)  # 1 saniye bekle
+    
+    # Her 30 döngüde bir sayfayı yenile (destek/direnç güncellemek için)
+    if i % 30 == 0 and i > 0:
+        st.rerun()
+
+# ==================== DESTEK/DİRENÇ GÖSTERİMİ ====================
 st.markdown("---")
-st.subheader("📊 GÜÇLÜ DESTEK/DİRENÇ SEVİYELERİ (3+ Borsa)")
+destek_direnc_goster(ortak_destek, ortak_direnc)
 
-col_sup, col_res = st.columns(2)
-
-with col_sup:
-    st.markdown("### 🟢 DESTEK")
-    if ortak_destek:
-        for seviye, guc in ortak_destek[:8]:
-            if guc == 4:
-                st.markdown(f"**🔥 ${seviye:,.2f}** - {guc}/4 borsa (Çok Güçlü)")
-            else:
-                st.markdown(f"**✅ ${seviye:,.2f}** - {guc}/4 borsa (Güçlü)")
-    else:
-        st.info("🔍 Destek seviyesi bulunamadı")
-
-with col_res:
-    st.markdown("### 🔴 DİRENÇ")
-    if ortak_direnc:
-        for seviye, guc in ortak_direnc[:8]:
-            if guc == 4:
-                st.markdown(f"**🔥 ${seviye:,.2f}** - {guc}/4 borsa (Çok Güçlü)")
-            else:
-                st.markdown(f"**✅ ${seviye:,.2f}** - {guc}/4 borsa (Güçlü)")
-    else:
-        st.info("🔍 Direnç seviyesi bulunamadı")
-
-# ==================== SCALP SİNYALİ ====================
-if scalp_acik and ana_df is not None and len(ana_df) > 20:
-    son_kapanis = ana_df['kapanis'].iloc[-1]
-    onceki_kapanis = ana_df['kapanis'].iloc[-2]
-    
-    en_yakin_destek = ortak_destek[0][0] if ortak_destek else None
-    en_yakin_direnc = ortak_direnc[0][0] if ortak_direnc else None
-    
-    mesafe_destek = ((ortalama_fiyat - en_yakin_destek) / ortalama_fiyat * 100) if en_yakin_destek else 100
-    mesafe_direnc = ((en_yakin_direnc - ortalama_fiyat) / ortalama_fiyat * 100) if en_yakin_direnc else 100
-    
-    scalp_sinyali = None
-    
-    if mesafe_destek < 1.5 and en_yakin_destek and son_kapanis > onceki_kapanis:
-        scalp_sinyali = {
-            'tip': 'LONG',
-            'giris': ortalama_fiyat,
-            'hedef': en_yakin_direnc if en_yakin_direnc else ortalama_fiyat * 1.02,
-            'stop': en_yakin_destek - (ortalama_fiyat * 0.005),
-            'destek': en_yakin_destek,
-            'direnc': en_yakin_direnc
-        }
-    elif mesafe_direnc < 1.5 and en_yakin_direnc and son_kapanis < onceki_kapanis:
-        scalp_sinyali = {
-            'tip': 'SHORT',
-            'giris': ortalama_fiyat,
-            'hedef': en_yakin_destek if en_yakin_destek else ortalama_fiyat * 0.98,
-            'stop': en_yakin_direnc + (ortalama_fiyat * 0.005),
-            'destek': en_yakin_destek,
-            'direnc': en_yakin_direnc
-        }
-    
-    if scalp_sinyali:
-        st.markdown("---")
-        st.subheader(f"🎯 GÜNCEL {scalp_sinyali['tip']} SCALP SİNYALİ")
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("📍 Giriş", f"${scalp_sinyali['giris']:,.2f}")
-            st.metric("🎯 Hedef", f"${scalp_sinyali['hedef']:,.2f}")
-        with col2:
-            st.metric("🛑 Stop", f"${scalp_sinyali['stop']:,.2f}")
-            if scalp_sinyali['destek']:
-                st.metric("🟢 Destek", f"${scalp_sinyali['destek']:,.2f}")
-        with col3:
-            if scalp_sinyali['direnc']:
-                st.metric("🔴 Direnç", f"${scalp_sinyali['direnc']:,.2f}")
-            if scalp_sinyali['tip'] == 'LONG':
-                kar_orani = ((scalp_sinyali['hedef'] - scalp_sinyali['giris']) / scalp_sinyali['giris'] * 100)
-            else:
-                kar_orani = ((scalp_sinyali['giris'] - scalp_sinyali['hedef']) / scalp_sinyali['giris'] * 100)
-            st.metric("📈 Kar", f"%{kar_orani:.2f}")
-
-# ==================== OTOMATİK YENİLEME (10 SANİYE) ====================
-st.markdown("---")
-
-gecen_sure = time.time() - st.session_state.yenileme_zamani
-kalan_sure = max(0, 10 - gecen_sure)
-
-if kalan_sure <= 0:
-    st.session_state.yenileme_zamani = time.time()
-    st.rerun()
-else:
-    st.info(f"🔄 Destek/Dirençler {int(kalan_sure)} saniye içinde otomatik yenilenecek... (TradingView grafiği CANLI akar)")
-
-st.caption("💡 **Nasıl çalışır?** TradingView grafiği saniyelik canlı akar. Destek/Direnç ve Scalp sinyalleri 10 saniyede bir güncellenir.")
+st.caption("💡 **Nasıl çalışır?** Fiyatlar 1 saniyede bir güncellenir. Destek/Dirençler sayfa yenilendiğinde güncellenir (30 saniye).")
