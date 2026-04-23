@@ -19,14 +19,14 @@ def telegram_mesaj_gonder(mesaj):
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mesaj, "parse_mode": "HTML"}
-        requests.post(url, json=payload, timeout=5)
-        return True
+        r = requests.post(url, json=payload, timeout=5)
+        return r.status_code == 200
     except:
         return False
 
 # ==================== BAŞLIK ====================
 st.title("📈 CANLI KRİPTO DASHBOARD")
-st.markdown("**Binance + Bybit + Bitget + OKX** | Canlı Fiyat | Destek/Direnç | Scalp Sinyalleri | Telegram Bot")
+st.markdown("**Binance + Bybit + Bitget + OKX** | 4 Borsa | Canlı Fiyat | Destek/Direnç | Scalp Sinyalleri")
 
 # ==================== COİN LİSTESİ ====================
 coin_listesi = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "ZEC/USDT", "APT/USDT", "SUI/USDT"]
@@ -71,15 +71,19 @@ with st.sidebar:
     st.markdown("---")
     
     st.subheader("🤖 TELEGRAM")
-    if st.button("📨 Test Mesajı Gönder", use_container_width=True):
-        if telegram_mesaj_gonder("✅ Bot çalışıyor! Scalp sinyalleri buraya gelecek."):
-            st.success("✅ Gönderildi!")
-        else:
-            st.error("❌ Hata!")
+    
+    # TEST BUTONU - BURADA KESİNLİKLE VAR
+    test_buton = st.button("📨 Test Mesajı Gönder", use_container_width=True)
+    if test_buton:
+        with st.spinner("Gönderiliyor..."):
+            if telegram_mesaj_gonder("✅ Bot çalışıyor! Scalp sinyalleri buraya gelecek."):
+                st.success("✅ Mesaj gönderildi! Telegram'ını kontrol et.")
+            else:
+                st.error("❌ Gönderilemedi! Token veya Chat ID hatalı.")
     
     st.markdown("---")
     
-    if st.button("🔄 Yenile", use_container_width=True):
+    if st.button("🔄 Sayfayı Yenile", use_container_width=True):
         st.rerun()
     
     st.success(f"✅ {len(BORSALAR)} Borsa Aktif")
@@ -276,4 +280,4 @@ with col2:
         else:
             st.markdown(f"⚪ **${seviye:,.2f}** - {guc}/4 Borsa (Zayıf)")
 
-st.caption("💡 Sinyal geldiğinde Telegram'a otomatik mesaj gider | Test butonu ile deneyebilirsin")
+st.caption("💡 Sinyal geldiğinde Telegram'a otomatik mesaj gider | Sol menüde TEST BUTONU var")
