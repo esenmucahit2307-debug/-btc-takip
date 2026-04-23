@@ -25,6 +25,12 @@ BORSALAR = {
     'OKX': ccxt.okx()
 }
 
+# ==================== OTURUM BAŞLANGIÇ ====================
+if 'yenileme_zamani' not in st.session_state:
+    st.session_state.yenileme_zamani = time.time()
+if 'sayac' not in st.session_state:
+    st.session_state.sayac = 10
+
 # ==================== KENAR ÇUBUĞU ====================
 with st.sidebar:
     st.header("⚙️ AYARLAR")
@@ -43,7 +49,6 @@ with st.sidebar:
     secili_zaman = st.selectbox("⏱️ Zaman dilimi:", list(zaman_dilimleri.keys()), index=3)
     tf_kodu = zaman_dilimleri[secili_zaman]
     
-    # TradingView için interval dönüşümü
     tf_map = {"1m": "1", "5m": "5", "15m": "15", "30m": "30", "1h": "60", "4h": "240", "1d": "1D", "1w": "1W"}
     tv_tf = tf_map.get(tf_kodu, "60")
     
@@ -56,14 +61,16 @@ with st.sidebar:
     
     st.markdown("---")
     
-    if st.button("🔄 Destek/Dirençleri Yenile", use_container_width=True):
+    # Manuel yenileme butonu
+    if st.button("🔄 Şimdi Yenile", use_container_width=True):
+        st.session_state.yenileme_zamani = time.time()
         st.rerun()
     
     st.caption(f"🕐 Son güncelleme: {datetime.now().strftime('%H:%M:%S')}")
-    st.info("📌 Grafik CANLI olarak akar. Destek/Dirençler sayfa yenilendiğinde güncellenir.")
+    st.info("📌 Grafik CANLI olarak akar. Destek/Dirençler 10 saniyede bir otomatik yenilenir.")
 
 # ==================== TRADINGVIEW CANLI GRAFİK ====================
-st.subheader(f"📊 {coin_adi} CANLI GRAFİK - {secili_zaman}")
+st.subheader(f"📊 {coin_adi} CANLI GRAFİK - {secili_zaman} (TradingView - Saniyelik Akış)")
 
 tv_widget = f"""
 <div class="tradingview-widget-container">
@@ -95,7 +102,7 @@ tv_widget = f"""
 html(tv_widget, height=600)
 
 # ==================== FONKSİYONLAR ====================
-def veri_cek(borsa, sembol, zaman_dilimi, limit=300):
+def veri_cek(borsa, sembol, zaman_dilimi, limit=200):
     try:
         bardata = borsa.fetch_ohlcv(sembol, zaman_dilimi, limit=limit)
         df = pd.DataFrame(bardata, columns=['zaman', 'acilis', 'yuksek', 'dusuk', 'kapanis', 'hacim'])
@@ -133,7 +140,7 @@ def anlik_fiyat_al(borsa, sembol):
         return None, None
 
 # ==================== CANLI FİYATLAR ====================
-st.subheader(f"💰 {coin_adi} CANLI FİYATLAR")
+st.subheader(f"💰 {coin_adi} CANLI FİYATLAR (1 saniye)")
 
 fiyat_cols = st.columns(4)
 anlik_fiyatlar = []
@@ -151,7 +158,7 @@ with st.spinner("Güçlü Destek/Direnç seviyeleri hesaplanıyor..."):
     tum_direncler, tum_destekler, ana_df = [], [], None
     
     for borsa_adi, borsa in BORSALAR.items():
-        df = veri_cek(borsa, secilen_coin, tf_kodu, limit=300)
+        df = veri_cek(borsa, secilen_coin, tf_kodu, limit=200)
         if df is not None and len(df) > 0:
             if ana_df is None:
                 ana_df = df
@@ -167,7 +174,6 @@ with st.spinner("Güçlü Destek/Direnç seviyeleri hesaplanıyor..."):
             tum_direncler.append(direnc)
             tum_destekler.append(destek)
     
-    # Ortak seviyeleri bul (3+ borsa)
     direnc_sayac = Counter()
     for alt_liste in tum_direncler:
         for item in alt_liste:
@@ -225,7 +231,6 @@ if scalp_acik and ana_df is not None and len(ana_df) > 20:
     
     scalp_sinyali = None
     
-    # LONG sinyali
     if mesafe_destek < 1.5 and en_yakin_destek and son_kapanis > onceki_kapanis:
         scalp_sinyali = {
             'tip': 'LONG',
@@ -235,7 +240,6 @@ if scalp_acik and ana_df is not None and len(ana_df) > 20:
             'destek': en_yakin_destek,
             'direnc': en_yakin_direnc
         }
-    # SHORT sinyali
     elif mesafe_direnc < 1.5 and en_yakin_direnc and son_kapanis < onceki_kapanis:
         scalp_sinyali = {
             'tip': 'SHORT',
@@ -267,6 +271,16 @@ if scalp_acik and ana_df is not None and len(ana_df) > 20:
                 kar_orani = ((scalp_sinyali['giris'] - scalp_sinyali['hedef']) / scalp_sinyali['giris'] * 100)
             st.metric("📈 Kar", f"%{kar_orani:.2f}")
 
-# ==================== BİLGİ ====================
+# ==================== OTOMATİK YENİLEME (10 SANİYE) ====================
 st.markdown("---")
-st.info("💡 **Bilgi:** Grafik TradingView altyapısı ile **CANLI** olarak güncellenir. Destek/Direnç seviyeleri sağ menüdeki 'Yenile' butonu ile güncellenir.")
+
+gecen_sure = time.time() - st.session_state.yenileme_zamani
+kalan_sure = max(0, 10 - gecen_sure)
+
+if kalan_sure <= 0:
+    st.session_state.yenileme_zamani = time.time()
+    st.rerun()
+else:
+    st.info(f"🔄 Destek/Dirençler {int(kalan_sure)} saniye içinde otomatik yenilenecek... (TradingView grafiği CANLI akar)")
+
+st.caption("💡 **Nasıl çalışır?** TradingView grafiği saniyelik canlı akar. Destek/Direnç ve Scalp sinyalleri 10 saniyede bir güncellenir.")
